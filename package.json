@@ -1,0 +1,15 @@
+{
+  "name": "nocameranews",
+  "version": "1.0.0",
+  "description": "Monitor and receive notifications for new products added to New Old Camera",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.18.2",
+    "node-notifier": "^10.0.1"
+  }
+}

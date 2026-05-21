@@ -1,0 +1,13 @@
+services:
+  nocamera-news:
+    build: .
+    container_name: nocamera-news
+    ports:
+      - "3000:3000"
+    volumes:
+      # Mount db.json to persist search keywords, settings, and match history
+      - ./db.json:/app/db.json
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
