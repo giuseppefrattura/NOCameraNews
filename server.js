@@ -363,6 +363,20 @@ function startPolling() {
 runMigration();
 startPolling();
 
+function requireAdminPassword(req, res, next) {
+  const password = process.env.ADMIN_PASSWORD;
+  if (!password) {
+    return next(); // Bypassed if no password is configured
+  }
+
+  const clientPassword = req.headers['x-admin-password'];
+  if (clientPassword === password) {
+    return next();
+  }
+
+  res.status(401).json({ error: 'Password amministratore non valida o mancante.' });
+}
+
 // ==========================================
 // EXPRESS REST API ENDPOINTS
 // ==========================================
@@ -393,7 +407,8 @@ app.get('/api/status', (req, res) => {
     scrapedCount: seenData.ids.length,
     matchCount: db.history.length,
     keywordsCount: db.keywords.length,
-    intervalMinutes: db.settings.intervalMinutes
+    intervalMinutes: db.settings.intervalMinutes,
+    passwordRequired: !!process.env.ADMIN_PASSWORD
   });
 });
 
@@ -403,7 +418,7 @@ app.get('/api/keywords', (req, res) => {
   res.json({ keywords: db.keywords });
 });
 
-app.post('/api/keywords', (req, res) => {
+app.post('/api/keywords', requireAdminPassword, (req, res) => {
   const { keywords } = req.body;
   if (!Array.isArray(keywords)) {
     return res.status(400).json({ error: 'Keywords must be an array of strings.' });
@@ -423,7 +438,7 @@ app.get('/api/history', (req, res) => {
   res.json({ history: db.history });
 });
 
-app.delete('/api/history', (req, res) => {
+app.delete('/api/history', requireAdminPassword, (req, res) => {
   const db = readDb();
   db.history = [];
   writeDb(db);
@@ -436,7 +451,7 @@ app.get('/api/settings', (req, res) => {
   res.json({ settings: db.settings });
 });
 
-app.post('/api/settings', (req, res) => {
+app.post('/api/settings', requireAdminPassword, (req, res) => {
   const { settings } = req.body;
   if (!settings || typeof settings !== 'object') {
     return res.status(400).json({ error: 'Settings object is required.' });
@@ -467,14 +482,14 @@ app.post('/api/settings', (req, res) => {
 });
 
 // Trigger a direct scraper execution manually
-app.post('/api/trigger-check', async (req, res) => {
+app.post('/api/trigger-check', requireAdminPassword, async (req, res) => {
   console.log('[API] Manual scraper trigger requested.');
   await checkNewProducts();
   res.json({ success: true, lastChecked: lastCheckedTime, lastError: lastCheckError });
 });
 
 // Trigger a local test notification
-app.post('/api/test-notification', (req, res) => {
+app.post('/api/test-notification', requireAdminPassword, (req, res) => {
   console.log('[API] Test notification requested.');
   sendDesktopNotification(
     'NOC Monitor: Test Alert 📸',

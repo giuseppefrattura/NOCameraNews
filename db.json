@@ -36,11 +36,10 @@
     }
   ],
   "settings": {
-    "intervalMinutes": 5,
-    "activeHoursStart": 8,
+    "intervalMinutes": 50,
+    "activeHoursStart": 9,
     "activeHoursEnd": 20,
     "activeDays": [
-      2,
       3,
       4,
       5,

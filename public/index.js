@@ -79,6 +79,91 @@ function setupEventListeners() {
 }
 
 // ==========================================
+// AUTHENTICATION INTERCEPTOR LAYER
+// ==========================================
+function promptAdminPassword() {
+  const modal = document.getElementById('authModal');
+  const input = document.getElementById('authPasswordInput');
+  const btnConfirm = document.getElementById('btnAuthConfirm');
+  const btnCancel = document.getElementById('btnAuthCancel');
+
+  modal.style.display = 'flex';
+  input.value = '';
+  input.focus();
+
+  return new Promise((resolve, reject) => {
+    function cleanup() {
+      modal.style.display = 'none';
+      btnConfirm.removeEventListener('click', onConfirm);
+      btnCancel.removeEventListener('click', onCancel);
+      input.removeEventListener('keydown', onKeyDown);
+    }
+
+    function onConfirm() {
+      const password = input.value;
+      cleanup();
+      resolve(password);
+    }
+
+    function onCancel() {
+      cleanup();
+      reject(new Error('Annullato dall\'utente'));
+    }
+
+    function onKeyDown(e) {
+      if (e.key === 'Enter') {
+        onConfirm();
+      } else if (e.key === 'Escape') {
+        onCancel();
+      }
+    }
+
+    btnConfirm.addEventListener('click', onConfirm);
+    btnCancel.addEventListener('click', onCancel);
+    input.addEventListener('keydown', onKeyDown);
+  });
+}
+
+async function fetchWithAuth(url, options = {}) {
+  options.headers = options.headers || {};
+  
+  if (options.body && !options.headers['Content-Type']) {
+    options.headers['Content-Type'] = 'application/json';
+  }
+
+  let cachedPassword = localStorage.getItem('admin_password');
+  if (cachedPassword) {
+    options.headers['x-admin-password'] = cachedPassword;
+  }
+
+  let res = await fetch(url, options);
+
+  if (res.status === 401) {
+    localStorage.removeItem('admin_password');
+    delete options.headers['x-admin-password'];
+
+    try {
+      const newPassword = await promptAdminPassword();
+      localStorage.setItem('admin_password', newPassword);
+      options.headers['x-admin-password'] = newPassword;
+      
+      res = await fetch(url, options);
+      
+      if (res.status === 401) {
+        localStorage.removeItem('admin_password');
+        showToast('Password errata o non valida.', 'danger');
+      }
+    } catch (err) {
+      console.log('Authentication prompt cancelled or failed:', err);
+      // Return a mock response object to let the calling code fail gracefully without throwing unhandled exceptions
+      return { ok: false, status: 401, json: async () => ({ error: 'Autenticazione richiesta.' }) };
+    }
+  }
+
+  return res;
+}
+
+// ==========================================
 // API CLIENT OPERATIONS
 // ==========================================
 
@@ -139,7 +224,7 @@ async function handleSaveSettings(e) {
   };
 
   try {
-    const res = await fetch(`${API_BASE}/api/settings`, {
+    const res = await fetchWithAuth(`${API_BASE}/api/settings`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(updated)
@@ -174,7 +259,7 @@ async function handleAddKeyword() {
   el.keywordInput.value = '';
 
   try {
-    const res = await fetch(`${API_BASE}/api/keywords`, {
+    const res = await fetchWithAuth(`${API_BASE}/api/keywords`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ keywords: state.keywords })
@@ -197,7 +282,7 @@ async function deleteKeyword(kw) {
   state.keywords = state.keywords.filter(item => item !== kw);
   
   try {
-    const res = await fetch(`${API_BASE}/api/keywords`, {
+    const res = await fetchWithAuth(`${API_BASE}/api/keywords`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ keywords: state.keywords })
@@ -224,7 +309,7 @@ async function triggerManualCheck() {
   `;
 
   try {
-    const res = await fetch(`${API_BASE}/api/trigger-check`, { method: 'POST' });
+    const res = await fetchWithAuth(`${API_BASE}/api/trigger-check`, { method: 'POST' });
     if (res.ok) {
       await fetchHistory();
       await updateStatus();
@@ -242,7 +327,7 @@ async function triggerManualCheck() {
 // Test Notification Trigger
 async function triggerTestNotification() {
   try {
-    const res = await fetch(`${API_BASE}/api/test-notification`, { method: 'POST' });
+    const res = await fetchWithAuth(`${API_BASE}/api/test-notification`, { method: 'POST' });
     if (res.ok) {
       showToast('Notifica di prova inviata!', 'success');
     }
@@ -257,7 +342,7 @@ async function clearHistory() {
   if (!confirm('Sei sicuro di voler svuotare tutta la cronologia degli articoli rilevati?')) return;
 
   try {
-    const res = await fetch(`${API_BASE}/api/history`, { method: 'DELETE' });
+    const res = await fetchWithAuth(`${API_BASE}/api/history`, { method: 'DELETE' });
     if (res.ok) {
       state.history = [];
       renderHistory();
@@ -274,6 +359,12 @@ async function updateStatus() {
     const res = await fetch(`${API_BASE}/api/status`);
     const data = await res.json();
     
+    // Secured Badge display toggle
+    const securedBadge = document.getElementById('securedBadge');
+    if (securedBadge) {
+      securedBadge.style.display = data.passwordRequired ? 'inline-flex' : 'none';
+    }
+
     // Status Pill
     if (data.enabled) {
       el.statusDot.className = 'status-dot pulsing';
