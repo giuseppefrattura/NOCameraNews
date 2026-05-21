@@ -7,6 +7,8 @@ services:
     volumes:
       # Mount db.json to persist search keywords, settings, and match history
       - ./db.json:/app/db.json
+      # Mount seen_ids.json to persist daily scraper track list
+      - ./seen_ids.json:/app/seen_ids.json
     restart: unless-stopped
     environment:
       - NODE_ENV=production

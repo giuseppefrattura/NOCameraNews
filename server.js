@@ -9,6 +9,7 @@ const { exec } = require('child_process');
 const app = express();
 const PORT = process.env.PORT || 3000;
 const DB_FILE = path.join(__dirname, 'db.json');
+const SEEN_IDS_FILE = path.join(__dirname, 'seen_ids.json');
 
 app.use(cors());
 app.use(express.json());
@@ -33,7 +34,6 @@ function readDb() {
     if (!fs.existsSync(DB_FILE)) {
       const initial = {
         keywords: ["LEICA", "NIKON"],
-        seenIds: [],
         history: [],
         settings: {
           intervalMinutes: 5,
@@ -51,7 +51,74 @@ function readDb() {
     return JSON.parse(data);
   } catch (err) {
     console.error('Error reading database file:', err);
-    return { keywords: [], seenIds: [], history: [], settings: {} };
+    return { keywords: [], history: [], settings: {} };
+  }
+}
+
+function runMigration() {
+  try {
+    if (fs.existsSync(DB_FILE)) {
+      const data = fs.readFileSync(DB_FILE, 'utf8');
+      const db = JSON.parse(data);
+      
+      // Migrate seenIds from db.json if present
+      if (db.hasOwnProperty('seenIds')) {
+        console.log('[Migration] Migrating seenIds from db.json to seen_ids.json...');
+        
+        const seenData = {
+          lastClearedDate: new Date().toDateString(),
+          ids: Array.isArray(db.seenIds) ? db.seenIds : []
+        };
+        fs.writeFileSync(SEEN_IDS_FILE, JSON.stringify(seenData, null, 2), 'utf8');
+        
+        delete db.seenIds;
+        fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2), 'utf8');
+        
+        console.log('[Migration] Migration successfully completed!');
+      }
+    }
+  } catch (err) {
+    console.error('[Migration] Error during migration:', err);
+  }
+}
+
+function readSeenIds() {
+  try {
+    const today = new Date().toDateString();
+    if (!fs.existsSync(SEEN_IDS_FILE)) {
+      const initial = {
+        lastClearedDate: today,
+        ids: []
+      };
+      fs.writeFileSync(SEEN_IDS_FILE, JSON.stringify(initial, null, 2), 'utf8');
+      return initial;
+    }
+    
+    const data = fs.readFileSync(SEEN_IDS_FILE, 'utf8');
+    const parsed = JSON.parse(data);
+    
+    // Reset seenIds daily list if day has changed
+    if (parsed.lastClearedDate !== today) {
+      console.log(`[Database] Day changed from "${parsed.lastClearedDate}" to "${today}". Resetting seenIds daily list.`);
+      parsed.lastClearedDate = today;
+      parsed.ids = [];
+      fs.writeFileSync(SEEN_IDS_FILE, JSON.stringify(parsed, null, 2), 'utf8');
+    }
+    
+    return parsed;
+  } catch (err) {
+    console.error('Error reading seen_ids file:', err);
+    return { lastClearedDate: new Date().toDateString(), ids: [] };
+  }
+}
+
+function writeSeenIds(data) {
+  try {
+    fs.writeFileSync(SEEN_IDS_FILE, JSON.stringify(data, null, 2), 'utf8');
+    return true;
+  } catch (err) {
+    console.error('Error writing to seen_ids file:', err);
+    return false;
   }
 }
 
@@ -190,7 +257,9 @@ async function checkNewProducts() {
 
     console.log(`[Scraper] Successfully loaded ${products.length} products from site.`);
 
-    const isFirstBoot = db.seenIds.length === 0;
+    const seenData = readSeenIds();
+    const isFirstBoot = seenData.ids.length === 0;
+    let seenModified = false;
     let dbModified = false;
 
     // Loop through retrieved items
@@ -198,9 +267,9 @@ async function checkNewProducts() {
       const itemId = item.id;
       
       // If we haven't seen this item before
-      if (!db.seenIds.includes(itemId)) {
-        db.seenIds.push(itemId);
-        dbModified = true;
+      if (!seenData.ids.includes(itemId)) {
+        seenData.ids.push(itemId);
+        seenModified = true;
 
         // Skip notifying on initial load to avoid flooding the user
         if (!isFirstBoot) {
@@ -250,7 +319,11 @@ async function checkNewProducts() {
     }
 
     if (isFirstBoot) {
-      console.log(`[Scraper] Initial boot complete. Saved ${db.seenIds.length} existing items to skip alerts.`);
+      console.log(`[Scraper] Initial boot complete. Saved ${seenData.ids.length} existing items to skip alerts.`);
+    }
+
+    if (seenModified) {
+      writeSeenIds(seenData);
     }
 
     if (dbModified) {
@@ -286,7 +359,8 @@ function startPolling() {
   checkTimeoutId = setInterval(checkNewProducts, intervalMs);
 }
 
-// Initialize database & Start scheduling on server load
+// Initialize database, run migrations & Start scheduling on server load
+runMigration();
 startPolling();
 
 // ==========================================
@@ -309,12 +383,14 @@ app.get('/api/status', (req, res) => {
     }
   }
 
+  const seenData = readSeenIds();
+
   res.json({
     enabled: db.settings.enabled,
     lastChecked: lastCheckedTime,
     lastError: lastCheckError,
     nextCheckInSeconds: nextCheckInSeconds,
-    scrapedCount: db.seenIds.length,
+    scrapedCount: seenData.ids.length,
     matchCount: db.history.length,
     keywordsCount: db.keywords.length,
     intervalMinutes: db.settings.intervalMinutes
