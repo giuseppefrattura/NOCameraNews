@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NOCameraNews - Impostazioni Monitoraggio</title>
+  <link rel="icon" type="image/png" href="favicon.png">
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Montserrat:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <!-- Stylesheet -->
+  <link rel="stylesheet" href="index.css">
+  <style>
+    /* Unique layout styles for standalone settings page */
+    .settings-page-container {
+      max-width: 600px;
+      margin: 80px auto;
+      padding: 24px;
+      position: relative;
+      z-index: 1;
+    }
+    
+    .settings-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 32px;
+    }
+    
+    .settings-header h1 {
+      font-family: 'Montserrat', sans-serif;
+      font-weight: 800;
+      font-size: 1.8rem;
+      letter-spacing: -0.5px;
+    }
+    
+    .login-gateway-card {
+      padding: 40px;
+      text-align: center;
+      animation: scaleIn 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    }
+    
+    .login-gateway-card h2 {
+      font-family: 'Montserrat', sans-serif;
+      font-size: 1.5rem;
+      font-weight: 700;
+      margin-bottom: 12px;
+    }
+    
+    .login-icon {
+      font-size: 3rem;
+      margin-bottom: 20px;
+      display: inline-block;
+      filter: drop-shadow(0 0 10px rgba(245, 158, 11, 0.4));
+    }
+    
+    .btn-block {
+      width: 100%;
+      margin-top: 10px;
+    }
+
+    .back-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--text-secondary);
+      text-decoration: none;
+      font-size: 0.9rem;
+      font-weight: 600;
+      transition: var(--transition);
+    }
+
+    .back-link:hover {
+      color: var(--primary);
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Background Blur Orbs -->
+  <div class="bg-orb orb-1"></div>
+  <div class="bg-orb orb-2"></div>
+  <div class="bg-orb orb-3"></div>
+
+  <div class="settings-page-container">
+    
+    <!-- Login Gateway (Shown by default if protection is active) -->
+    <div id="loginGateway" class="glass-card login-gateway-card" style="display: none;">
+      <span class="login-icon">🔐</span>
+      <h2>Accesso Riservato</h2>
+      <p class="card-desc">Le impostazioni di sistema sono protette. Inserisci la password amministratore per continuare.</p>
+      
+      <div class="form-group" style="margin-bottom: 20px; text-align: left;">
+        <label for="gatewayPasswordInput">Password</label>
+        <input type="password" id="gatewayPasswordInput" placeholder="Inserisci la password...">
+      </div>
+      
+      <div style="display: flex; gap: 12px;">
+        <a href="index.html" class="btn btn-secondary" style="flex: 1;">Annulla</a>
+        <button id="btnGatewayConfirm" class="btn btn-primary" style="flex: 1;">Accedi</button>
+      </div>
+    </div>
+
+    <!-- Settings Form (Hidden by default, shown upon successful authentication) -->
+    <div id="settingsContainer" style="display: none;">
+      <header class="settings-header">
+        <div>
+          <h1>Configurazione</h1>
+          <p class="card-desc" style="margin-bottom: 0;">Gestisci le preferenze del monitor New Old Camera.</p>
+        </div>
+        <a href="index.html" class="back-link">
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+          Torna al Dashboard
+        </a>
+      </header>
+
+      <!-- Parole Chiave Section (Protected) -->
+      <section class="glass-card keywords-card" style="margin-bottom: 24px;">
+        <div class="card-header">
+          <div class="header-title" style="display: flex; align-items: center; gap: 8px;">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21 21-6-6m2-5a7 7 0 1 1-14 0 7 7 0 0 1 14 0Z"/></svg>
+            <h2 style="font-family: 'Montserrat', sans-serif; font-size: 1.25rem; font-weight: 700; margin-bottom: 0;">Parole Chiave</h2>
+          </div>
+          <span class="counter-badge" id="keywordsCount" style="background: rgba(245, 158, 11, 0.12); border: 1px solid rgba(245, 158, 11, 0.3); color: var(--primary); padding: 4px 8px; border-radius: 20px; font-size: 0.75rem; font-weight: 600;">0</span>
+        </div>
+        <p class="card-desc" style="margin-top: 8px; margin-bottom: 20px;">Ricevi una notifica istantanea ogni volta che un articolo caricato corrisponde a queste parole chiave (es. Leica, Nikon, Canon, Hasselblad).</p>
+        
+        <div class="keyword-input-wrapper" style="display: flex; gap: 10px; margin-bottom: 20px;">
+          <input type="text" id="keywordInput" placeholder="Aggiungi parola chiave... (es. Leica M)" style="flex: 1;">
+          <button id="btnAddKeyword" type="button" class="btn btn-primary" title="Aggiungi" style="padding: 12px; min-width: 48px; height: 48px; border-radius: var(--radius-sm); display: flex; align-items: center; justify-content: center;">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+          </button>
+        </div>
+
+        <!-- Tags Container -->
+        <div class="tags-container" id="tagsContainer">
+          <!-- Dynamic Tags injected here -->
+        </div>
+      </section>
+
+      <section class="glass-card">
+        <form id="settingsForm" class="settings-form">
+          
+          <!-- Interval -->
+          <div class="form-group">
+            <label for="intervalInput">Frequenza Controlli (minuti)</label>
+            <div class="input-unit">
+              <input type="number" id="intervalInput" min="1" max="60" required>
+              <span class="unit">min</span>
+            </div>
+          </div>
+
+          <!-- Sound Toggle -->
+          <div class="form-group row-align">
+            <div class="toggle-info">
+              <label>Notifiche Sonore</label>
+              <span class="toggle-desc">Riproduci il suono di sistema macOS</span>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="soundToggle">
+              <span class="slider round"></span>
+            </label>
+          </div>
+
+          <!-- Active Monitoring Toggle -->
+          <div class="form-group row-align">
+            <div class="toggle-info">
+              <label>Monitoraggio Attivo</label>
+              <span class="toggle-desc">Abilita o sospendi il controllo automatico</span>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="enabledToggle">
+              <span class="slider round"></span>
+            </label>
+          </div>
+
+          <!-- Time Range -->
+          <div class="form-group">
+            <label>Fascia Oraria Attiva (Ore)</label>
+            <div class="range-inputs">
+              <div class="range-field">
+                <span class="field-label">Dalle</span>
+                <input type="number" id="hoursStartInput" min="0" max="23" placeholder="8">
+              </div>
+              <div class="range-field">
+                <span class="field-label">Alle</span>
+                <input type="number" id="hoursEndInput" min="0" max="23" placeholder="20">
+              </div>
+            </div>
+            <span class="field-hint">Il monitoraggio si metterà in pausa al di fuori di questa fascia oraria.</span>
+          </div>
+
+          <!-- Active Days -->
+          <div class="form-group">
+            <label>Giorni di Monitoraggio Attivo</label>
+            <div class="days-selector">
+              <label class="day-checkbox" title="Lunedì">
+                <input type="checkbox" value="1" name="activeDays">
+                <span>L</span>
+              </label>
+              <label class="day-checkbox" title="Martedì">
+                <input type="checkbox" value="2" name="activeDays">
+                <span>M</span>
+              </label>
+              <label class="day-checkbox" title="Mercoledì">
+                <input type="checkbox" value="3" name="activeDays">
+                <span>M</span>
+              </label>
+              <label class="day-checkbox" title="Giovedì">
+                <input type="checkbox" value="4" name="activeDays">
+                <span>G</span>
+              </label>
+              <label class="day-checkbox" title="Venerdì">
+                <input type="checkbox" value="5" name="activeDays">
+                <span>V</span>
+              </label>
+              <label class="day-checkbox" title="Sabato">
+                <input type="checkbox" value="6" name="activeDays">
+                <span>S</span>
+              </label>
+              <label class="day-checkbox" title="Domenica">
+                <input type="checkbox" value="0" name="activeDays">
+                <span>D</span>
+              </label>
+            </div>
+          </div>
+
+          <button type="submit" class="btn btn-primary btn-block">
+            Salva Impostazioni
+          </button>
+        </form>
+      </section>
+    </div>
+
+  </div>
+
+  <script src="settings.js"></script>
+</body>
+</html>

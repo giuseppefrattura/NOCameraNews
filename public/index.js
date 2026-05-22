@@ -5,7 +5,7 @@ const API_BASE = '';
 let state = {
   keywords: [],
   history: [],
-  settings: {},
+  enabled: true,
   countdownSeconds: 0,
   countdownIntervalId: null,
   statusPollIntervalId: null
@@ -20,18 +20,6 @@ const el = {
   timerContainer: document.getElementById('timerContainer'),
   btnTriggerCheck: document.getElementById('btnTriggerCheck'),
   btnTestNotify: document.getElementById('btnTestNotify'),
-  
-  keywordInput: document.getElementById('keywordInput'),
-  btnAddKeyword: document.getElementById('btnAddKeyword'),
-  tagsContainer: document.getElementById('tagsContainer'),
-  keywordsCount: document.getElementById('keywordsCount'),
-  
-  settingsForm: document.getElementById('settingsForm'),
-  intervalInput: document.getElementById('intervalInput'),
-  soundToggle: document.getElementById('soundToggle'),
-  enabledToggle: document.getElementById('enabledToggle'),
-  hoursStartInput: document.getElementById('hoursStartInput'),
-  hoursEndInput: document.getElementById('hoursEndInput'),
   
   historyCount: document.getElementById('historyCount'),
   btnClearHistory: document.getElementById('btnClearHistory'),
@@ -48,8 +36,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   showSkeletons();
   
   // Initial data fetch
-  await fetchSettings();
-  await fetchKeywords();
   await fetchHistory();
   await updateStatus();
   
@@ -59,15 +45,6 @@ document.addEventListener('DOMContentLoaded', async () => {
 });
 
 function setupEventListeners() {
-  // Add Keyword
-  el.btnAddKeyword.addEventListener('click', handleAddKeyword);
-  el.keywordInput.addEventListener('keypress', (e) => {
-    if (e.key === 'Enter') handleAddKeyword();
-  });
-  
-  // Save Settings
-  el.settingsForm.addEventListener('submit', handleSaveSettings);
-  
   // Manual Trigger Check
   el.btnTriggerCheck.addEventListener('click', triggerManualCheck);
   
@@ -167,18 +144,6 @@ async function fetchWithAuth(url, options = {}) {
 // API CLIENT OPERATIONS
 // ==========================================
 
-// Get Keywords
-async function fetchKeywords() {
-  try {
-    const res = await fetch(`${API_BASE}/api/keywords`);
-    const data = await res.json();
-    state.keywords = data.keywords || [];
-    renderKeywords();
-  } catch (err) {
-    console.error('Error fetching keywords:', err);
-  }
-}
-
 // Get History
 async function fetchHistory() {
   try {
@@ -188,114 +153,6 @@ async function fetchHistory() {
     renderHistory();
   } catch (err) {
     console.error('Error fetching history:', err);
-  }
-}
-
-// Get Settings
-async function fetchSettings() {
-  try {
-    const res = await fetch(`${API_BASE}/api/settings`);
-    const data = await res.json();
-    state.settings = data.settings || {};
-    populateSettingsForm();
-  } catch (err) {
-    console.error('Error fetching settings:', err);
-  }
-}
-
-// Save Settings
-async function handleSaveSettings(e) {
-  e.preventDefault();
-  
-  const checkedDays = [];
-  document.querySelectorAll('input[name="activeDays"]:checked').forEach(cb => {
-    checkedDays.push(parseInt(cb.value));
-  });
-
-  const updated = {
-    settings: {
-      intervalMinutes: parseInt(el.intervalInput.value) || 5,
-      soundEnabled: el.soundToggle.checked,
-      enabled: el.enabledToggle.checked,
-      activeHoursStart: parseInt(el.hoursStartInput.value) !== NaN ? parseInt(el.hoursStartInput.value) : 8,
-      activeHoursEnd: parseInt(el.hoursEndInput.value) !== NaN ? parseInt(el.hoursEndInput.value) : 20,
-      activeDays: checkedDays
-    }
-  };
-
-  try {
-    const res = await fetchWithAuth(`${API_BASE}/api/settings`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(updated)
-    });
-    
-    if (res.ok) {
-      const data = await res.json();
-      state.settings = data.settings;
-      showToast('Impostazioni salvate con successo!', 'success');
-      
-      // Update countdown immediately
-      await updateStatus();
-    }
-  } catch (err) {
-    console.error('Error saving settings:', err);
-    showToast('Impossibile salvare le impostazioni.', 'danger');
-  }
-}
-
-// Add Keyword Action
-async function handleAddKeyword() {
-  const value = el.keywordInput.value.trim().toUpperCase();
-  if (!value) return;
-  
-  if (state.keywords.includes(value)) {
-    showToast('Questa parola chiave è già tracciata!', 'info');
-    el.keywordInput.value = '';
-    return;
-  }
-
-  state.keywords.push(value);
-  el.keywordInput.value = '';
-
-  try {
-    const res = await fetchWithAuth(`${API_BASE}/api/keywords`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ keywords: state.keywords })
-    });
-    
-    if (res.ok) {
-      const data = await res.json();
-      state.keywords = data.keywords;
-      renderKeywords();
-      showToast(`Parola chiave "${value}" aggiunta!`, 'success');
-    }
-  } catch (err) {
-    console.error('Error saving keywords:', err);
-    showToast('Errore nel salvare la parola chiave.', 'danger');
-  }
-}
-
-// Remove Keyword Action
-async function deleteKeyword(kw) {
-  state.keywords = state.keywords.filter(item => item !== kw);
-  
-  try {
-    const res = await fetchWithAuth(`${API_BASE}/api/keywords`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ keywords: state.keywords })
-    });
-    
-    if (res.ok) {
-      const data = await res.json();
-      state.keywords = data.keywords;
-      renderKeywords();
-      showToast(`Parola chiave rimossa.`, 'info');
-    }
-  } catch (err) {
-    console.error('Error deleting keyword:', err);
   }
 }
 
@@ -367,10 +224,12 @@ async function updateStatus() {
 
     // Status Pill
     if (data.enabled) {
+      state.enabled = true;
       el.statusDot.className = 'status-dot pulsing';
       el.statusText.textContent = 'Monitor Attivo';
       el.timerContainer.style.display = 'flex';
     } else {
+      state.enabled = false;
       el.statusDot.className = 'status-dot paused';
       el.statusText.textContent = 'Monitor Pausato';
       el.timerContainer.style.display = 'none';
@@ -399,53 +258,7 @@ async function updateStatus() {
 // RENDER HELPERS
 // ==========================================
 
-// Populate Form Settings
-function populateSettingsForm() {
-  const s = state.settings;
-  el.intervalInput.value = s.intervalMinutes || 5;
-  el.soundToggle.checked = s.soundEnabled !== false;
-  el.enabledToggle.checked = s.enabled !== false;
-  el.hoursStartInput.value = s.activeHoursStart !== undefined ? s.activeHoursStart : 8;
-  el.hoursEndInput.value = s.activeHoursEnd !== undefined ? s.activeHoursEnd : 20;
 
-  // Uncheck all active days first
-  document.querySelectorAll('input[name="activeDays"]').forEach(cb => {
-    cb.checked = false;
-  });
-
-  // Check specified days
-  const activeDays = s.activeDays || [2, 3, 4, 5, 6];
-  activeDays.forEach(day => {
-    const cb = document.querySelector(`input[name="activeDays"][value="${day}"]`);
-    if (cb) cb.checked = true;
-  });
-}
-
-// Render Keywords List
-function renderKeywords() {
-  el.keywordsCount.textContent = state.keywords.length;
-  el.tagsContainer.innerHTML = '';
-  
-  if (state.keywords.length === 0) {
-    el.tagsContainer.innerHTML = `<span class="text-muted" style="font-size: 0.8rem;">Nessuna parola chiave impostata.</span>`;
-    return;
-  }
-
-  state.keywords.forEach(kw => {
-    const tag = document.createElement('span');
-    tag.className = 'tag';
-    tag.innerHTML = `
-      ${escapeHtml(kw)}
-      <span class="delete-btn">&times;</span>
-    `;
-    
-    tag.querySelector('.delete-btn').addEventListener('click', () => {
-      deleteKeyword(kw);
-    });
-
-    el.tagsContainer.appendChild(tag);
-  });
-}
 
 // Render Scraped Match History Feed
 function renderHistory() {
@@ -586,7 +399,7 @@ function startCountdownTimer() {
 
   // Ticks every second locally to show smooth countdown
   state.countdownIntervalId = setInterval(() => {
-    if (state.settings.enabled && state.countdownSeconds > 0) {
+    if (state.enabled && state.countdownSeconds > 0) {
       state.countdownSeconds--;
       updateTimerText();
     }
@@ -594,7 +407,7 @@ function startCountdownTimer() {
 }
 
 function updateTimerText() {
-  if (!state.settings.enabled) {
+  if (!state.enabled) {
     el.nextCheckTimer.textContent = 'Disattivato';
     return;
   }

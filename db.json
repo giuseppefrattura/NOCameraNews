@@ -1,8 +1,5 @@
 {
-  "keywords": [
-    "LEICA",
-    "NIKON"
-  ],
+  "keywords": [],
   "history": [
     {
       "id": 776332,
@@ -36,10 +33,11 @@
     }
   ],
   "settings": {
-    "intervalMinutes": 50,
+    "intervalMinutes": 30,
     "activeHoursStart": 9,
     "activeHoursEnd": 20,
     "activeDays": [
+      2,
       3,
       4,
       5,

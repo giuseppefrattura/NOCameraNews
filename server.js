@@ -413,7 +413,7 @@ app.get('/api/status', (req, res) => {
 });
 
 // Keywords CRUD
-app.get('/api/keywords', (req, res) => {
+app.get('/api/keywords', requireAdminPassword, (req, res) => {
   const db = readDb();
   res.json({ keywords: db.keywords });
 });
@@ -446,7 +446,7 @@ app.delete('/api/history', requireAdminPassword, (req, res) => {
 });
 
 // Settings REST
-app.get('/api/settings', (req, res) => {
+app.get('/api/settings', requireAdminPassword, (req, res) => {
   const db = readDb();
   res.json({ settings: db.settings });
 });
