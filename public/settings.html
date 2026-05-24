@@ -74,6 +74,136 @@
     .back-link:hover {
       color: var(--primary);
     }
+
+    /* Telegram Integration Premium Styles */
+    #telegramFields {
+      max-height: 0;
+      opacity: 0;
+      overflow: hidden;
+      transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    #telegramTokenInput {
+      padding-right: 48px;
+    }
+
+    #btnToggleTokenVisibility {
+      transition: var(--transition);
+    }
+    
+    #btnToggleTokenVisibility:hover {
+      color: var(--text-primary) !important;
+    }
+    
+    .section-divider {
+      border-top: 1px solid rgba(255, 255, 255, 0.08);
+      padding-top: 20px;
+      margin-bottom: 12px;
+    }
+
+    #btnTestTelegram {
+      transition: var(--transition);
+    }
+
+    #btnTestTelegram:hover {
+      background: rgba(59, 130, 246, 0.1) !important;
+      border-color: var(--info) !important;
+      transform: translateY(-1px);
+    }
+    
+    #btnTestTelegram:active {
+      transform: translateY(0);
+    }
+
+    /* Glassmorphic Modal Backdrop */
+    .modal-backdrop {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      background: rgba(4, 6, 10, 0.7);
+      backdrop-filter: blur(8px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 100000;
+      animation: fadeIn 0.25s ease-out;
+    }
+
+    .modal-card {
+      width: 90%;
+      max-width: 450px;
+      border-color: rgba(255, 255, 255, 0.12);
+      animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+      padding-bottom: 12px;
+      margin-bottom: 12px;
+    }
+
+    .modal-close-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      font-size: 1.8rem;
+      cursor: pointer;
+      line-height: 1;
+      transition: var(--transition);
+    }
+
+    .modal-close-btn:hover {
+      color: var(--danger);
+    }
+
+    /* Cog configuration icon styling on Tag */
+    .tag {
+      position: relative;
+      padding-right: 48px !important; /* Make room for cog and close buttons */
+    }
+
+    .tag-actions-wrapper {
+      position: absolute;
+      right: 8px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .tag-cog-btn {
+      cursor: pointer;
+      color: var(--text-muted);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      transition: var(--transition);
+      font-size: 0.85rem;
+    }
+
+    .tag-cog-btn:hover {
+      color: var(--primary);
+      transform: rotate(45deg);
+    }
+
+    .tag-cog-btn.active-filters {
+      color: var(--primary);
+      filter: drop-shadow(0 0 3px var(--primary-glow));
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+
+    @keyframes slideUp {
+      from { transform: translateY(20px); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
+    }
   </style>
 </head>
 <body>
@@ -151,10 +281,22 @@
             </div>
           </div>
 
+          <!-- Desktop Notifications Toggle -->
+          <div class="form-group row-align">
+            <div class="toggle-info">
+              <label>Notifiche Desktop macOS</label>
+              <span class="toggle-desc">Mostra gli avvisi nativi sul tuo desktop</span>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="desktopToggle">
+              <span class="slider round"></span>
+            </label>
+          </div>
+
           <!-- Sound Toggle -->
           <div class="form-group row-align">
             <div class="toggle-info">
-              <label>Notifiche Sonore</label>
+              <label>Notifiche Sonore macOS</label>
               <span class="toggle-desc">Riproduci il suono di sistema macOS</span>
             </div>
             <label class="switch">
@@ -192,7 +334,7 @@
           </div>
 
           <!-- Active Days -->
-          <div class="form-group">
+          <div class="form-group" style="border-bottom: 1px solid rgba(255, 255, 255, 0.05); padding-bottom: 20px;">
             <label>Giorni di Monitoraggio Attivo</label>
             <div class="days-selector">
               <label class="day-checkbox" title="Lunedì">
@@ -226,7 +368,56 @@
             </div>
           </div>
 
-          <button type="submit" class="btn btn-primary btn-block">
+          <!-- Telegram Bot Section Divider -->
+          <div class="section-divider" style="margin-top: 10px;">
+            <div style="display: flex; align-items: center; gap: 8px; color: #3b82f6; font-family: 'Montserrat', sans-serif; font-weight: 700; font-size: 1.15rem; margin-bottom: 6px;">
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="color: #3b82f6; filter: drop-shadow(0 0 4px rgba(59, 130, 246, 0.4));"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg>
+              Integrazione Telegram Bot
+            </div>
+            <p class="field-hint" style="color: var(--text-secondary); margin-bottom: 16px;">Ricevi avvisi e controlla il monitor remoto direttamente sul tuo smartphone tramite un Bot Telegram privato.</p>
+          </div>
+
+          <!-- Telegram Enabled Toggle -->
+          <div class="form-group row-align">
+            <div class="toggle-info">
+              <label>Abilita Notifiche Telegram</label>
+              <span class="toggle-desc">Invia i nuovi match al bot Telegram</span>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="telegramToggle">
+              <span class="slider round"></span>
+            </label>
+          </div>
+
+          <!-- Telegram credentials fields -->
+          <div id="telegramFields" style="display: flex; flex-direction: column; gap: 16px;">
+            <!-- Bot Token Input -->
+            <div class="form-group">
+              <label for="telegramTokenInput">Telegram Bot Token</label>
+              <div style="position: relative; display: flex; align-items: center;">
+                <input type="password" id="telegramTokenInput" placeholder="Token del bot (es: 123456:ABC-DEF...)">
+                <button type="button" id="btnToggleTokenVisibility" style="position: absolute; right: 12px; background: transparent; border: none; color: var(--text-muted); cursor: pointer; display: flex; align-items: center; justify-content: center; width: 32px; height: 32px;" title="Mostra/Nascondi Token">
+                  <svg id="eyeIcon" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+                </button>
+              </div>
+              <span class="field-hint">Generabile contattando <a href="https://t.me/BotFather" target="_blank" style="color: #3b82f6; text-decoration: none; font-weight: 600;">@BotFather</a> su Telegram.</span>
+            </div>
+
+            <!-- Chat ID Input -->
+            <div class="form-group">
+              <label for="telegramChatIdInput">Telegram Chat ID</label>
+              <input type="text" id="telegramChatIdInput" placeholder="Il tuo Chat ID numerico (es: 987654321)">
+              <span class="field-hint">Ottenibile inviando un messaggio a <a href="https://t.me/userinfobot" target="_blank" style="color: #3b82f6; text-decoration: none; font-weight: 600;">@userinfobot</a>.</span>
+            </div>
+
+            <!-- Test Telegram connection button -->
+            <button type="button" id="btnTestTelegram" class="btn btn-secondary" style="border: 1px solid rgba(59, 130, 246, 0.3); font-weight: 600; display: inline-flex; align-items: center; gap: 8px; justify-content: center; height: 44px; margin-top: 4px; margin-bottom: 12px;">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="color: #3b82f6;"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+              Invia Notifica di Prova Telegram
+            </button>
+          </div>
+
+          <button type="submit" class="btn btn-primary btn-block" style="margin-top: 10px;">
             Salva Impostazioni
           </button>
         </form>
@@ -234,6 +425,51 @@
     </div>
 
   </div>
+
+    <!-- Glassmorphic Modal for Keyword Filters -->
+    <div id="filterModal" class="modal-backdrop" style="display: none;">
+      <div class="glass-card modal-card">
+        <div class="modal-header">
+          <div style="display: flex; align-items: center; gap: 8px; color: var(--primary);">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="filter: drop-shadow(0 0 4px var(--primary-glow));"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+            <h2 style="font-family: 'Montserrat', sans-serif; font-size: 1.3rem; font-weight: 700; margin-bottom: 0;">Filtri Avanzati</h2>
+          </div>
+          <button id="btnCancelFilter" type="button" class="modal-close-btn">&times;</button>
+        </div>
+        <p class="card-desc" style="margin-top: 6px; margin-bottom: 18px;">Configura i filtri per la parola chiave: <strong id="modalKeywordTitle" style="color: var(--primary);"></strong></p>
+        
+        <form id="filterForm">
+          <!-- Price range -->
+          <div class="form-group" style="margin-bottom: 16px;">
+            <label>Fascia di Prezzo (€)</label>
+            <div class="range-inputs">
+              <div class="range-field">
+                <span class="field-label">Min</span>
+                <input type="number" id="filterMinPrice" placeholder="Nessuno" min="0">
+              </div>
+              <div class="range-field">
+                <span class="field-label">Max</span>
+                <input type="number" id="filterMaxPrice" placeholder="Nessuno" min="0">
+              </div>
+            </div>
+            <span class="field-hint">Verifica il prezzo finale (promozione compresa).</span>
+          </div>
+
+          <!-- Negative Exclusions -->
+          <div class="form-group" style="margin-bottom: 24px;">
+            <label for="filterExclude">Parole da Escludere</label>
+            <input type="text" id="filterExclude" placeholder="tappo, custodia, filtro, scatola">
+            <span class="field-hint">Separa i termini con le virgole. Se l'articolo contiene una di queste parole, verrà ignorato.</span>
+          </div>
+
+          <!-- Buttons -->
+          <div class="modal-actions" style="display: flex; gap: 12px;">
+            <button id="btnResetFilter" type="button" class="btn btn-secondary" style="flex: 1;">Azzera Filtri</button>
+            <button id="btnSaveFilter" type="submit" class="btn btn-primary" style="flex: 1;">Applica</button>
+          </div>
+        </form>
+      </div>
+    </div>
 
   <script src="settings.js"></script>
 </body>

@@ -17,11 +17,21 @@ const el = {
   settingsForm: document.getElementById('settingsForm'),
   
   intervalInput: document.getElementById('intervalInput'),
+  desktopToggle: document.getElementById('desktopToggle'),
   soundToggle: document.getElementById('soundToggle'),
   enabledToggle: document.getElementById('enabledToggle'),
   hoursStartInput: document.getElementById('hoursStartInput'),
   hoursEndInput: document.getElementById('hoursEndInput'),
   activeDaysCheckboxes: document.getElementsByName('activeDays'),
+  
+  // Telegram Integration elements
+  telegramToggle: document.getElementById('telegramToggle'),
+  telegramFields: document.getElementById('telegramFields'),
+  telegramTokenInput: document.getElementById('telegramTokenInput'),
+  telegramChatIdInput: document.getElementById('telegramChatIdInput'),
+  btnToggleTokenVisibility: document.getElementById('btnToggleTokenVisibility'),
+  btnTestTelegram: document.getElementById('btnTestTelegram'),
+  eyeIcon: document.getElementById('eyeIcon'),
   
   keywordInput: document.getElementById('keywordInput'),
   btnAddKeyword: document.getElementById('btnAddKeyword'),
@@ -52,6 +62,119 @@ function setupEventListeners() {
   
   // Submit Settings Form
   el.settingsForm.addEventListener('submit', handleSettingsSubmit);
+
+  // Telegram fields toggling dynamic visibility
+  if (el.telegramToggle) {
+    el.telegramToggle.addEventListener('change', (e) => {
+      toggleTelegramFieldsVisibility(e.target.checked);
+    });
+  }
+
+  // Telegram test button
+  if (el.btnTestTelegram) {
+    el.btnTestTelegram.addEventListener('click', handleTestTelegram);
+  }
+
+  // Bot Token visibility toggle
+  if (el.btnToggleTokenVisibility) {
+    el.btnToggleTokenVisibility.addEventListener('click', () => {
+      const isPassword = el.telegramTokenInput.type === 'password';
+      el.telegramTokenInput.type = isPassword ? 'text' : 'password';
+      
+      // Update eye icon SVG to strike-through if visible
+      if (isPassword) {
+        el.eyeIcon.innerHTML = `<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-10-7-10-7a22.49 22.49 0 0 1 2.9-4M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 10 7 10 7a19.5 19.5 0 0 1-2.73 4.14M4.93 4.93l14.14 14.14"/><circle cx="12" cy="12" r="3"/>`;
+      } else {
+        el.eyeIcon.innerHTML = `<path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/>`;
+      }
+    });
+  }
+
+  // Filter Modal Event Listeners
+  const filterForm = document.getElementById('filterForm');
+  if (filterForm) {
+    filterForm.addEventListener('submit', handleFilterSubmit);
+  }
+  const btnCancelFilter = document.getElementById('btnCancelFilter');
+  if (btnCancelFilter) {
+    btnCancelFilter.addEventListener('click', closeFilterModal);
+  }
+  const btnResetFilter = document.getElementById('btnResetFilter');
+  if (btnResetFilter) {
+    btnResetFilter.addEventListener('click', resetFilterForm);
+  }
+  const filterModal = document.getElementById('filterModal');
+  if (filterModal) {
+    filterModal.addEventListener('click', (e) => {
+      if (e.target.id === 'filterModal') closeFilterModal();
+    });
+  }
+}
+
+function toggleTelegramFieldsVisibility(show) {
+  if (!el.telegramFields) return;
+  
+  // Ensure basic smooth transitions
+  el.telegramFields.style.transition = 'all 0.4s cubic-bezier(0.16, 1, 0.3, 1)';
+  
+  if (show) {
+    el.telegramFields.style.opacity = '1';
+    el.telegramFields.style.pointerEvents = 'auto';
+    el.telegramFields.style.maxHeight = '500px';
+    el.telegramFields.style.transform = 'translateY(0)';
+    el.telegramFields.style.marginTop = '12px';
+  } else {
+    el.telegramFields.style.opacity = '0';
+    el.telegramFields.style.pointerEvents = 'none';
+    el.telegramFields.style.maxHeight = '0';
+    el.telegramFields.style.transform = 'translateY(-10px)';
+    el.telegramFields.style.marginTop = '0';
+  }
+}
+
+async function handleTestTelegram() {
+  const token = el.telegramTokenInput.value.trim();
+  const chatId = el.telegramChatIdInput.value.trim();
+
+  if (!token || !chatId) {
+    showToast('Inserisci Token Bot e Chat ID prima di inviare un test!', 'info');
+    return;
+  }
+
+  el.btnTestTelegram.disabled = true;
+  const originalHtml = el.btnTestTelegram.innerHTML;
+  el.btnTestTelegram.innerHTML = 'Invio in corso...';
+
+  // Submit with X-Admin-Password if needed
+  const headers = {
+    'Content-Type': 'application/json'
+  };
+  
+  if (state.passwordRequired) {
+    const password = localStorage.getItem('admin_password');
+    if (password) headers['x-admin-password'] = password;
+  }
+
+  try {
+    const res = await fetch(`${API_BASE}/api/test-telegram`, {
+      method: 'POST',
+      headers: headers,
+      body: JSON.stringify({ telegramToken: token, telegramChatId: chatId })
+    });
+
+    const data = await res.json();
+    if (res.ok) {
+      showToast('Notifica di prova Telegram inviata con successo!', 'success');
+    } else {
+      showToast(data.error || 'Errore durante l\'invio del test.', 'danger');
+    }
+  } catch (err) {
+    console.error('Error testing Telegram:', err);
+    showToast('Impossibile connettersi al server per il test.', 'danger');
+  } finally {
+    el.btnTestTelegram.disabled = false;
+    el.btnTestTelegram.innerHTML = originalHtml;
+  }
 }
 
 // ==========================================
@@ -209,10 +332,19 @@ function populateForm(settings) {
   if (!settings) return;
   
   el.intervalInput.value = settings.intervalMinutes || 5;
+  el.desktopToggle.checked = settings.desktopEnabled !== false;
   el.soundToggle.checked = settings.soundEnabled !== false;
   el.enabledToggle.checked = settings.enabled !== false;
   el.hoursStartInput.value = settings.activeHoursStart !== undefined ? settings.activeHoursStart : 8;
   el.hoursEndInput.value = settings.activeHoursEnd !== undefined ? settings.activeHoursEnd : 20;
+  
+  // Telegram Settings
+  el.telegramToggle.checked = settings.telegramEnabled === true;
+  el.telegramTokenInput.value = settings.telegramToken || '';
+  el.telegramChatIdInput.value = settings.telegramChatId || '';
+  
+  // Initial visibility of Telegram Fields
+  toggleTelegramFieldsVisibility(settings.telegramEnabled === true);
   
   // Reset and check days checkboxes
   const activeDays = settings.activeDays || [1, 2, 3, 4, 5];
@@ -233,14 +365,26 @@ async function handleSettingsSubmit(e) {
     }
   });
   
+  // Validation for Telegram Bot Token and Chat ID if enabled
+  if (el.telegramToggle.checked) {
+    if (!el.telegramTokenInput.value.trim() || !el.telegramChatIdInput.value.trim()) {
+      showToast('Inserisci il Bot Token e il Chat ID per abilitare Telegram.', 'danger');
+      return;
+    }
+  }
+
   const payload = {
     settings: {
       intervalMinutes: parseInt(el.intervalInput.value, 10),
+      desktopEnabled: el.desktopToggle.checked,
       soundEnabled: el.soundToggle.checked,
       enabled: el.enabledToggle.checked,
       activeHoursStart: parseInt(el.hoursStartInput.value, 10),
       activeHoursEnd: parseInt(el.hoursEndInput.value, 10),
-      activeDays: activeDays
+      activeDays: activeDays,
+      telegramEnabled: el.telegramToggle.checked,
+      telegramToken: el.telegramTokenInput.value.trim(),
+      telegramChatId: el.telegramChatIdInput.value.trim()
     }
   };
   
@@ -404,8 +548,10 @@ function createToastContainer() {
 }
 
 // ==========================================
-// KEYWORD TAG OPERATIONS
+// KEYWORD TAG OPERATIONS WITH FILTERS
 // ==========================================
+let currentFilterIndex = null;
+
 function renderKeywords() {
   el.keywordsCount.textContent = state.keywords.length;
   el.tagsContainer.innerHTML = '';
@@ -415,27 +561,161 @@ function renderKeywords() {
     return;
   }
 
-  state.keywords.forEach(kw => {
+  state.keywords.forEach((kw, index) => {
+    const isObj = typeof kw === 'object' && kw !== null;
+    const kwText = isObj ? kw.text : kw;
+    
+    // Check if there are active filters on this keyword
+    const hasFilters = isObj && (
+      (kw.minPrice !== undefined && kw.minPrice !== null && kw.minPrice !== '') ||
+      (kw.maxPrice !== undefined && kw.maxPrice !== null && kw.maxPrice !== '') ||
+      (Array.isArray(kw.exclude) && kw.exclude.length > 0)
+    );
+
     const tag = document.createElement('span');
     tag.className = 'tag';
     tag.innerHTML = `
-      ${escapeHtml(kw)}
-      <span class="delete-btn">&times;</span>
+      ${escapeHtml(kwText)}
+      <span class="tag-actions-wrapper">
+        <span class="tag-cog-btn ${hasFilters ? 'active-filters' : ''}" title="${hasFilters ? 'Filtri attivi (Clicca per modificare)' : 'Imposta filtri avanzati'}">⚙️</span>
+        <span class="delete-btn" title="Rimuovi">&times;</span>
+      </span>
     `;
     
-    tag.querySelector('.delete-btn').addEventListener('click', () => {
-      deleteKeyword(kw);
+    tag.querySelector('.delete-btn').addEventListener('click', (e) => {
+      e.stopPropagation();
+      deleteKeyword(kwText);
+    });
+
+    tag.querySelector('.tag-cog-btn').addEventListener('click', (e) => {
+      e.stopPropagation();
+      openFilterModal(index);
     });
 
     el.tagsContainer.appendChild(tag);
   });
 }
 
+function openFilterModal(index) {
+  currentFilterIndex = index;
+  const kw = state.keywords[index];
+  const isObj = typeof kw === 'object' && kw !== null;
+  const kwText = isObj ? kw.text : kw;
+
+  document.getElementById('modalKeywordTitle').textContent = kwText;
+  
+  // Populate modal fields
+  if (isObj) {
+    document.getElementById('filterMinPrice').value = kw.minPrice !== null && kw.minPrice !== undefined ? kw.minPrice : '';
+    document.getElementById('filterMaxPrice').value = kw.maxPrice !== null && kw.maxPrice !== undefined ? kw.maxPrice : '';
+    document.getElementById('filterExclude').value = Array.isArray(kw.exclude) ? kw.exclude.join(', ') : '';
+  } else {
+    document.getElementById('filterMinPrice').value = '';
+    document.getElementById('filterMaxPrice').value = '';
+    document.getElementById('filterExclude').value = '';
+  }
+
+  // Show modal backdrop
+  const filterModal = document.getElementById('filterModal');
+  filterModal.style.display = 'flex';
+}
+
+function closeFilterModal() {
+  document.getElementById('filterModal').style.display = 'none';
+  currentFilterIndex = null;
+}
+
+async function handleFilterSubmit(e) {
+  e.preventDefault();
+  if (currentFilterIndex === null) return;
+
+  const minPrice = document.getElementById('filterMinPrice').value.trim();
+  const maxPrice = document.getElementById('filterMaxPrice').value.trim();
+  const excludeVal = document.getElementById('filterExclude').value.trim();
+
+  // Convert comma-separated exclusions
+  const exclude = excludeVal 
+    ? excludeVal.split(',').map(word => word.trim().toUpperCase()).filter(word => word.length > 0)
+    : [];
+
+  const kw = state.keywords[currentFilterIndex];
+  const isObj = typeof kw === 'object' && kw !== null;
+  const kwText = isObj ? kw.text : kw;
+
+  // Update active state
+  state.keywords[currentFilterIndex] = {
+    text: kwText,
+    minPrice: minPrice !== '' ? Number(minPrice) : null,
+    maxPrice: maxPrice !== '' ? Number(maxPrice) : null,
+    exclude: exclude
+  };
+
+  // Convert back to string if they cleared everything
+  const item = state.keywords[currentFilterIndex];
+  if (item.minPrice === null && item.maxPrice === null && item.exclude.length === 0) {
+    state.keywords[currentFilterIndex] = kwText;
+  }
+
+  closeFilterModal();
+  renderKeywords();
+  
+  // Save modified keywords list immediately to server!
+  await saveKeywordsToServer();
+}
+
+function resetFilterForm() {
+  document.getElementById('filterMinPrice').value = '';
+  document.getElementById('filterMaxPrice').value = '';
+  document.getElementById('filterExclude').value = '';
+}
+
+async function saveKeywordsToServer() {
+  const originalKeywords = [...state.keywords];
+  
+  try {
+    const headers = { 'Content-Type': 'application/json' };
+    if (state.passwordRequired) {
+      const password = localStorage.getItem('admin_password');
+      if (password) headers['x-admin-password'] = password;
+    }
+    
+    const res = await fetch(`${API_BASE}/api/keywords`, {
+      method: 'POST',
+      headers: headers,
+      body: JSON.stringify({ keywords: state.keywords })
+    });
+    
+    if (res.ok) {
+      const data = await res.json();
+      state.keywords = data.keywords;
+      renderKeywords();
+      showToast('Configurazione filtri salvata!', 'success');
+    } else if (res.status === 401) {
+      showToast('Credenziali non valide o scadute.', 'danger');
+      localStorage.removeItem('admin_password');
+      window.location.reload();
+    } else {
+      throw new Error('Save failed');
+    }
+  } catch (err) {
+    console.error('Error saving keywords:', err);
+    state.keywords = originalKeywords;
+    renderKeywords();
+    showToast('Impossibile salvare i filtri sul server.', 'danger');
+  }
+}
+
 async function handleAddKeyword() {
   const value = el.keywordInput.value.trim().toUpperCase();
   if (!value) return;
   
-  if (state.keywords.includes(value)) {
+  // Safe comparison mapping structured or string keywords
+  const exists = state.keywords.some(kw => {
+    const text = typeof kw === 'object' && kw !== null ? kw.text : kw;
+    return text === value;
+  });
+
+  if (exists) {
     showToast('Questa parola chiave è già tracciata!', 'info');
     el.keywordInput.value = '';
     return;
@@ -486,9 +766,12 @@ async function handleAddKeyword() {
   }
 }
 
-async function deleteKeyword(kw) {
+async function deleteKeyword(kwText) {
   const originalKeywords = [...state.keywords];
-  state.keywords = state.keywords.filter(item => item !== kw);
+  state.keywords = state.keywords.filter(item => {
+    const text = typeof item === 'object' && item !== null ? item.text : item;
+    return text !== kwText;
+  });
   
   try {
     const headers = { 'Content-Type': 'application/json' };
