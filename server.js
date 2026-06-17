@@ -571,89 +571,93 @@ async function checkNewProducts() {
     // Loop through retrieved items
     for (const item of products) {
       const itemId = item.id;
+      const isNewItem = !seenData.ids.includes(itemId);
       
-      // If we haven't seen this item before
-      if (!seenData.ids.includes(itemId)) {
+      if (isNewItem) {
         seenData.ids.push(itemId);
         seenModified = true;
+      }
 
-        // Skip notifying on initial load to avoid flooding the user
-        if (!isFirstBoot) {
-          // Check matching keywords
-          const brand = (item.marca || '').toUpperCase();
-          const model = (item.modello || '').toUpperCase();
-          const textToSearch = `${brand} ${model}`;
+      // Check if product is already in history to prevent duplicates
+      const existsInHistory = db.history.some(h => h.id === itemId);
 
-          const matchedKeyword = db.keywords.find(kw => {
-            const kwText = typeof kw === 'object' && kw !== null ? kw.text : kw;
-            if (!kwText) return false;
-            return textToSearch.includes(kwText.toUpperCase().trim());
-          });
+      if (!existsInHistory) {
+        // Check matching keywords
+        const brand = (item.marca || '').toUpperCase();
+        const model = (item.modello || '').toUpperCase();
+        const textToSearch = `${brand} ${model}`;
 
-          if (matchedKeyword) {
-            let isMatch = true;
-            let keywordText = matchedKeyword;
+        const matchedKeyword = db.keywords.find(kw => {
+          const kwText = typeof kw === 'object' && kw !== null ? kw.text : kw;
+          if (!kwText) return false;
+          return textToSearch.includes(kwText.toUpperCase().trim());
+        });
 
-            if (typeof matchedKeyword === 'object' && matchedKeyword !== null) {
-              keywordText = matchedKeyword.text;
-              
-              // Calculate effective active price
-              const activePrice = item.prezzoPromozione > 0 && item.prezzoPromozione < item.prezzoVendita
-                ? item.prezzoPromozione
-                : item.prezzoVendita;
+        if (matchedKeyword) {
+          let isMatch = true;
+          let keywordText = matchedKeyword;
 
-              // Check min price limit
-              if (matchedKeyword.minPrice !== undefined && matchedKeyword.minPrice !== null && matchedKeyword.minPrice !== '') {
-                if (activePrice < Number(matchedKeyword.minPrice)) {
-                  isMatch = false;
-                  console.log(`[Scraper] Skip: Product "${brand} ${model}" price (€${activePrice}) is below min limit (€${matchedKeyword.minPrice}) for keyword "${keywordText}"`);
-                }
-              }
-              // Check max price limit
-              if (isMatch && matchedKeyword.maxPrice !== undefined && matchedKeyword.maxPrice !== null && matchedKeyword.maxPrice !== '') {
-                if (activePrice > Number(matchedKeyword.maxPrice)) {
-                  isMatch = false;
-                  console.log(`[Scraper] Skip: Product "${brand} ${model}" price (€${activePrice}) is above max limit (€${matchedKeyword.maxPrice}) for keyword "${keywordText}"`);
-                }
-              }
-              // Check exclusions
-              if (isMatch && Array.isArray(matchedKeyword.exclude) && matchedKeyword.exclude.length > 0) {
-                const hasExcludedWord = matchedKeyword.exclude.some(word => {
-                  const cleanWord = word.trim().toUpperCase();
-                  if (!cleanWord) return false;
-                  return textToSearch.includes(cleanWord);
-                });
-                if (hasExcludedWord) {
-                  isMatch = false;
-                  console.log(`[Scraper] Skip: Product "${brand} ${model}" matches excluded terms [${matchedKeyword.exclude.join(', ')}] for keyword "${keywordText}"`);
-                }
+          if (typeof matchedKeyword === 'object' && matchedKeyword !== null) {
+            keywordText = matchedKeyword.text;
+            
+            // Calculate effective active price
+            const activePrice = item.prezzoPromozione > 0 && item.prezzoPromozione < item.prezzoVendita
+              ? item.prezzoPromozione
+              : item.prezzoVendita;
+
+            // Check min price limit
+            if (matchedKeyword.minPrice !== undefined && matchedKeyword.minPrice !== null && matchedKeyword.minPrice !== '') {
+              if (activePrice < Number(matchedKeyword.minPrice)) {
+                isMatch = false;
+                console.log(`[Scraper] Skip: Product "${brand} ${model}" price (€${activePrice}) is below min limit (€${matchedKeyword.minPrice}) for keyword "${keywordText}"`);
               }
             }
+            // Check max price limit
+            if (isMatch && matchedKeyword.maxPrice !== undefined && matchedKeyword.maxPrice !== null && matchedKeyword.maxPrice !== '') {
+              if (activePrice > Number(matchedKeyword.maxPrice)) {
+                isMatch = false;
+                console.log(`[Scraper] Skip: Product "${brand} ${model}" price (€${activePrice}) is above max limit (€${matchedKeyword.maxPrice}) for keyword "${keywordText}"`);
+              }
+            }
+            // Check exclusions
+            if (isMatch && Array.isArray(matchedKeyword.exclude) && matchedKeyword.exclude.length > 0) {
+              const hasExcludedWord = matchedKeyword.exclude.some(word => {
+                const cleanWord = word.trim().toUpperCase();
+                if (!cleanWord) return false;
+                return textToSearch.includes(cleanWord);
+              });
+              if (hasExcludedWord) {
+                isMatch = false;
+                console.log(`[Scraper] Skip: Product "${brand} ${model}" matches excluded terms [${matchedKeyword.exclude.join(', ')}] for keyword "${keywordText}"`);
+              }
+            }
+          }
 
-            if (isMatch) {
-              console.log(`[Scraper] Match found! "${brand} ${model}" matches keyword "${keywordText}"`);
-              
-              // Build matched item history object
-              const historyItem = {
-                id: item.id,
-                codice: item.codice,
-                marca: item.marca,
-                modello: item.modello,
-                prezzoVendita: item.prezzoVendita,
-                prezzoPromozione: item.prezzoPromozione,
-                prenotato: item.prenotato,
-                stato: item.stato,
-                disponibile: item.disponibile,
-                virtualPath: item.virtualPath,
-                matchedKeyword: keywordText, // Store string to keep UI and history consistent
-                timestampScraped: new Date().toISOString(),
-                notified: true
-              };
+          if (isMatch) {
+            console.log(`[Scraper] Match found! "${brand} ${model}" matches keyword "${keywordText}"`);
+            
+            // Build matched item history object
+            const historyItem = {
+              id: item.id,
+              codice: item.codice,
+              marca: item.marca,
+              modello: item.modello,
+              prezzoVendita: item.prezzoVendita,
+              prezzoPromozione: item.prezzoPromozione,
+              prenotato: item.prenotato,
+              stato: item.stato,
+              disponibile: item.disponibile,
+              virtualPath: item.virtualPath,
+              matchedKeyword: keywordText, // Store string to keep UI and history consistent
+              timestampScraped: new Date().toISOString(),
+              notified: !isFirstBoot && isNewItem
+            };
 
-              db.history.unshift(historyItem); // Insert at beginning of history array
-              dbModified = true;
+            db.history.unshift(historyItem); // Insert at beginning of history array
+            dbModified = true;
 
-              // Trigger Notification
+            // Trigger Notification ONLY for truly new items after first boot
+            if (!isFirstBoot && isNewItem) {
               const priceStr = item.prezzoPromozione > 0 && item.prezzoPromozione < item.prezzoVendita 
                 ? `€${item.prezzoPromozione} (PROMO! scontrato da €${item.prezzoVendita})`
                 : `€${item.prezzoVendita}`;
@@ -830,6 +834,30 @@ app.delete('/api/history', requireAdminPassword, (req, res) => {
   db.history = [];
   writeDb(db);
   res.json({ success: true, message: 'Match history cleared.' });
+});
+
+// Reset matching history and seen IDs cache
+app.post('/api/reset-all', requireAdminPassword, (req, res) => {
+  try {
+    console.log('[API] Reset cache and history requested.');
+    
+    // Clear seen IDs
+    const seenData = {
+      lastClearedDate: new Date().toDateString(),
+      ids: []
+    };
+    writeSeenIds(seenData);
+
+    // Clear history
+    const db = readDb();
+    db.history = [];
+    writeDb(db);
+
+    res.json({ success: true, message: 'Cronologia e cache dei prodotti resettate con successo.' });
+  } catch (err) {
+    console.error('Error resetting database and cache:', err);
+    res.status(500).json({ error: 'Errore interno durante il reset.' });
+  }
 });
 
 // Settings REST

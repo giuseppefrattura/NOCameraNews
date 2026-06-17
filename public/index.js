@@ -23,6 +23,7 @@ const el = {
   
   historyCount: document.getElementById('historyCount'),
   btnClearHistory: document.getElementById('btnClearHistory'),
+  btnResetAll: document.getElementById('btnResetAll'),
   historyGrid: document.getElementById('historyGrid')
 };
 
@@ -53,6 +54,11 @@ function setupEventListeners() {
   
   // Clear History
   el.btnClearHistory.addEventListener('click', clearHistory);
+
+  // Reset Cache and Database
+  if (el.btnResetAll) {
+    el.btnResetAll.addEventListener('click', resetAll);
+  }
 }
 
 // ==========================================
@@ -207,6 +213,27 @@ async function clearHistory() {
     }
   } catch (err) {
     console.error('Error clearing history:', err);
+  }
+}
+
+// Reset Cache and DB
+async function resetAll() {
+  if (!confirm('Sei sicuro di voler azzerare la cache dei prodotti visti (seen IDs) e il database dei match? Verrà eseguita una nuova scansione pulita.')) return;
+
+  try {
+    const res = await fetchWithAuth(`${API_BASE}/api/reset-all`, { method: 'POST' });
+    if (res.ok) {
+      state.history = [];
+      renderHistory();
+      await updateStatus();
+      showToast('Cache e database azzerati con successo.', 'success');
+    } else {
+      const errData = await res.json();
+      showToast(errData.error || 'Impossibile azzerare cache e database.', 'danger');
+    }
+  } catch (err) {
+    console.error('Error resetting cache and database:', err);
+    showToast('Impossibile azzerare cache e database.', 'danger');
   }
 }
 
