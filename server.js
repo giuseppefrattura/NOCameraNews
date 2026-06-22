@@ -554,7 +554,32 @@ function fetchProductList() {
 async function checkNewProducts() {
   if (isCheckingNow) return;
   
+  const now = new Date();
+  const currentHour = now.getHours();
+  const todayDateString = now.toDateString();
   const db = readDb();
+
+  // Auto-clear logic after 20:00 or when a new day starts
+  const isNewDay = db.lastDailyClearDate !== todayDateString;
+  const isAfterEightPM = currentHour >= 20;
+  const alreadyClearedTodayAfterEight = db.lastDailyClearDate === todayDateString && db.lastDailyClearHour >= 20;
+
+  if (isNewDay || (isAfterEightPM && !alreadyClearedTodayAfterEight)) {
+    console.log(`[Auto-Clear] Resetting daily databases (New Day: ${isNewDay}, After 20:00: ${isAfterEightPM})`);
+    
+    db.history = [];
+    db.lastDailyClearDate = todayDateString;
+    db.lastDailyClearHour = currentHour;
+    writeDb(db);
+
+    writeAllDaily([]);
+
+    const seenData = readSeenIds();
+    seenData.ids = [];
+    seenData.lastClearedDate = todayDateString;
+    writeSeenIds(seenData);
+  }
+
   const settings = db.settings;
 
   // Verify Schedule and Activation settings
@@ -563,8 +588,6 @@ async function checkNewProducts() {
     return;
   }
 
-  const now = new Date();
-  const currentHour = now.getHours();
   const currentDay = now.getDay(); // 0 = Sun, 1 = Mon, 2 = Tue, ... 6 = Sat
 
   const isCorrectDay = settings.activeDays.includes(currentDay);
