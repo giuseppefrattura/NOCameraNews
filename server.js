@@ -10,6 +10,7 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const DB_FILE = path.join(__dirname, 'db.json');
 const SEEN_IDS_FILE = path.join(__dirname, 'seen_ids.json');
+const ALL_DAILY_FILE = path.join(__dirname, 'all_daily.json');
 
 app.use(cors());
 app.use(express.json());
@@ -438,6 +439,30 @@ function writeDb(data) {
   }
 }
 
+function readAllDaily() {
+  try {
+    if (!fs.existsSync(ALL_DAILY_FILE)) {
+      fs.writeFileSync(ALL_DAILY_FILE, JSON.stringify([], null, 2), 'utf8');
+      return [];
+    }
+    const data = fs.readFileSync(ALL_DAILY_FILE, 'utf8');
+    return JSON.parse(data);
+  } catch (err) {
+    console.error('Error reading all_daily database file:', err);
+    return [];
+  }
+}
+
+function writeAllDaily(data) {
+  try {
+    fs.writeFileSync(ALL_DAILY_FILE, JSON.stringify(data, null, 2), 'utf8');
+    return true;
+  } catch (err) {
+    console.error('Error writing to all_daily database file:', err);
+    return false;
+  }
+}
+
 // ==========================================
 // MACOS NOTIFICATION SYSTEMS (Dual Mode)
 // ==========================================
@@ -568,9 +593,32 @@ async function checkNewProducts() {
     let seenModified = false;
     let dbModified = false;
 
+    const allDailyData = readAllDaily();
+    let allDailyModified = false;
+
     // Loop through retrieved items
     for (const item of products) {
       const itemId = item.id;
+
+      // Save all products to all_daily.json if not already present
+      const existsInAllDaily = allDailyData.some(p => p.id === itemId);
+      if (!existsInAllDaily) {
+        allDailyData.unshift({
+          id: item.id,
+          codice: item.codice,
+          marca: item.marca,
+          modello: item.modello,
+          prezzoVendita: item.prezzoVendita,
+          prezzoPromozione: item.prezzoPromozione,
+          prenotato: item.prenotato,
+          stato: item.stato,
+          disponibile: item.disponibile,
+          virtualPath: item.virtualPath,
+          timestampScraped: new Date().toISOString()
+        });
+        allDailyModified = true;
+      }
+
       const isNewItem = !seenData.ids.includes(itemId);
       
       if (isNewItem) {
@@ -704,6 +752,10 @@ async function checkNewProducts() {
       writeDb(db);
     }
 
+    if (allDailyModified) {
+      writeAllDaily(allDailyData);
+    }
+
     lastCheckedTime = new Date().toISOString();
   } catch (err) {
     console.error('[Scraper] Error in product crawler:', err.message);
@@ -829,6 +881,12 @@ app.get('/api/history', (req, res) => {
   res.json({ history: db.history });
 });
 
+// All daily products list
+app.get('/api/all-daily', (req, res) => {
+  const allDaily = readAllDaily();
+  res.json({ products: allDaily });
+});
+
 app.delete('/api/history', requireAdminPassword, (req, res) => {
   const db = readDb();
   db.history = [];
@@ -853,7 +911,10 @@ app.post('/api/reset-all', requireAdminPassword, (req, res) => {
     db.history = [];
     writeDb(db);
 
-    res.json({ success: true, message: 'Cronologia e cache dei prodotti resettate con successo.' });
+    // Clear all_daily database
+    writeAllDaily([]);
+
+    res.json({ success: true, message: 'Cronologia, cache e database dei prodotti di tutti i giorni resettati con successo.' });
   } catch (err) {
     console.error('Error resetting database and cache:', err);
     res.status(500).json({ error: 'Errore interno durante il reset.' });

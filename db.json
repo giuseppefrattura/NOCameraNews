@@ -1,37 +1,6 @@
 {
   "keywords": [],
-  "history": [
-    {
-      "id": 776332,
-      "codice": "26N2173",
-      "marca": "LEICA-M",
-      "modello": "75/2.8  APO-SKOPAR VM BLACK VOIGTLANDER",
-      "prezzoVendita": 699,
-      "prezzoPromozione": 0,
-      "prenotato": 0,
-      "stato": "A",
-      "disponibile": "M",
-      "virtualPath": null,
-      "matchedKeyword": "LEICA",
-      "timestampScraped": "2026-05-21T14:24:33.118Z",
-      "notified": true
-    },
-    {
-      "id": 760523,
-      "codice": "25C1051",
-      "marca": "LEICA-M",
-      "modello": "28/5.6 SUMMARON-M MATTE BLACK PAINT",
-      "prezzoVendita": 5950,
-      "prezzoPromozione": 0,
-      "prenotato": 0,
-      "stato": "AB",
-      "disponibile": "M",
-      "virtualPath": "/Upload/25C1051_NOC_8647.jpg",
-      "matchedKeyword": "LEICA",
-      "timestampScraped": "2026-05-21T14:24:33.076Z",
-      "notified": true
-    }
-  ],
+  "history": [],
   "settings": {
     "intervalMinutes": 30,
     "activeHoursStart": 9,
@@ -44,6 +13,10 @@
       6
     ],
     "enabled": true,
-    "soundEnabled": true
+    "soundEnabled": true,
+    "telegramEnabled": false,
+    "telegramToken": "",
+    "telegramChatId": "",
+    "desktopEnabled": true
   }
 }

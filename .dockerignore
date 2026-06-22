@@ -1,5 +1,7 @@
 node_modules
 npm-debug.log
 db.json
+seen_ids.json
+all_daily.json
 .git
 .gitignore

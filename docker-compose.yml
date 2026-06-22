@@ -9,6 +9,8 @@ services:
       - ./db.json:/app/db.json
       # Mount seen_ids.json to persist daily scraper track list
       - ./seen_ids.json:/app/seen_ids.json
+      # Mount all_daily.json to persist all scraped daily products
+      - ./all_daily.json:/app/all_daily.json
     restart: unless-stopped
     environment:
       - NODE_ENV=production
