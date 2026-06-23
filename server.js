@@ -8,9 +8,83 @@ const { exec } = require('child_process');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const DB_FILE = path.join(__dirname, 'db.json');
-const SEEN_IDS_FILE = path.join(__dirname, 'seen_ids.json');
-const ALL_DAILY_FILE = path.join(__dirname, 'all_daily.json');
+
+// Setup PostgreSQL Connection Pool
+const { Pool } = require('pg');
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL || 'postgresql://postgres:postgrespassword@localhost:5432/nocameranews'
+});
+
+async function initDb(retries = 10, delay = 2000) {
+  for (let i = 0; i < retries; i++) {
+    try {
+      const client = await pool.connect();
+      try {
+        // Create preferences table
+        await client.query(`
+          CREATE TABLE IF NOT EXISTS app_preferences (
+            key VARCHAR(50) PRIMARY KEY,
+            value JSONB NOT NULL
+          );
+        `);
+
+        // Create daily products table
+        await client.query(`
+          CREATE TABLE IF NOT EXISTS all_daily_products (
+            id BIGINT PRIMARY KEY,
+            data JSONB NOT NULL,
+            timestamp_scraped TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+          );
+        `);
+
+        // Initialize default db settings if they do not exist
+        const dbCheck = await client.query("SELECT 1 FROM app_preferences WHERE key = 'db'");
+        if (dbCheck.rowCount === 0) {
+          const initialDb = {
+            keywords: ["LEICA", "NIKON"],
+            history: [],
+            settings: {
+              intervalMinutes: 5,
+              activeHoursStart: 8,
+              activeHoursEnd: 20,
+              activeDays: [2, 3, 4, 5, 6], // Martedì - Sabato
+              enabled: true,
+              soundEnabled: true,
+              desktopEnabled: true,
+              telegramEnabled: false,
+              telegramToken: "",
+              telegramChatId: ""
+            }
+          };
+          await client.query("INSERT INTO app_preferences (key, value) VALUES ($1, $2)", ['db', initialDb]);
+          console.log('[Database] Default app settings database seeded.');
+        }
+
+        // Initialize default seen_ids if they do not exist
+        const seenIdsCheck = await client.query("SELECT 1 FROM app_preferences WHERE key = 'seen_ids'");
+        if (seenIdsCheck.rowCount === 0) {
+          const initialSeenIds = {
+            lastClearedDate: new Date().toDateString(),
+            ids: []
+          };
+          await client.query("INSERT INTO app_preferences (key, value) VALUES ($1, $2)", ['seen_ids', initialSeenIds]);
+          console.log('[Database] Default seen_ids tracker seeded.');
+        }
+
+        console.log('[Database] PostgreSQL tables initialized successfully.');
+        return; // Connection and init succeeded, exit loop
+      } finally {
+        client.release();
+      }
+    } catch (err) {
+      console.warn(`[Database] Connection attempt ${i + 1} failed: ${err.message}. Retrying in ${delay / 1000}s...`);
+      if (i === retries - 1) {
+        throw err;
+      }
+      await new Promise(resolve => setTimeout(resolve, delay));
+    }
+  }
+}
 
 app.use(cors());
 app.use(express.json());
@@ -30,60 +104,42 @@ let lastCheckError = null;
 // ==========================================
 // DATABASE HELPERS (Atomic Reads & Writes)
 // ==========================================
-function readDb() {
+async function readDb() {
   try {
-    if (!fs.existsSync(DB_FILE)) {
-      const initial = {
-        keywords: ["LEICA", "NIKON"],
-        history: [],
-        settings: {
-          intervalMinutes: 5,
-          activeHoursStart: 8,
-          activeHoursEnd: 20,
-          activeDays: [2, 3, 4, 5, 6], // Martedì - Sabato
-          enabled: true,
-          soundEnabled: true,
-          desktopEnabled: true,
-          telegramEnabled: false,
-          telegramToken: "",
-          telegramChatId: ""
+    const res = await pool.query("SELECT value FROM app_preferences WHERE key = 'db'");
+    if (res.rowCount > 0) {
+      const parsed = res.rows[0].value;
+      
+      // Self-migrating settings layer
+      if (parsed.settings) {
+        let modified = false;
+        if (parsed.settings.telegramEnabled === undefined) {
+          parsed.settings.telegramEnabled = false;
+          modified = true;
         }
-      };
-      fs.writeFileSync(DB_FILE, JSON.stringify(initial, null, 2));
-      return initial;
+        if (parsed.settings.telegramToken === undefined) {
+          parsed.settings.telegramToken = "";
+          modified = true;
+        }
+        if (parsed.settings.telegramChatId === undefined) {
+          parsed.settings.telegramChatId = "";
+          modified = true;
+        }
+        if (parsed.settings.desktopEnabled === undefined) {
+          parsed.settings.desktopEnabled = true;
+          modified = true;
+        }
+        if (modified) {
+          await writeDb(parsed);
+        }
+      }
+      
+      return parsed;
     }
-    const data = fs.readFileSync(DB_FILE, 'utf8');
-    const parsed = JSON.parse(data);
-    
-    // Self-migrating settings layer
-    if (parsed.settings) {
-      let modified = false;
-      if (parsed.settings.telegramEnabled === undefined) {
-        parsed.settings.telegramEnabled = false;
-        modified = true;
-      }
-      if (parsed.settings.telegramToken === undefined) {
-        parsed.settings.telegramToken = "";
-        modified = true;
-      }
-      if (parsed.settings.telegramChatId === undefined) {
-        parsed.settings.telegramChatId = "";
-        modified = true;
-      }
-      if (parsed.settings.desktopEnabled === undefined) {
-        parsed.settings.desktopEnabled = true;
-        modified = true;
-      }
-      if (modified) {
-        fs.writeFileSync(DB_FILE, JSON.stringify(parsed, null, 2), 'utf8');
-      }
-    }
-    
-    return parsed;
   } catch (err) {
-    console.error('Error reading database file:', err);
-    return { keywords: [], history: [], settings: {} };
+    console.error('Error reading database from PostgreSQL:', err);
   }
+  return { keywords: [], history: [], settings: {} };
 }
 
 // ==========================================
@@ -98,7 +154,7 @@ function escapeHtmlForTelegram(str) {
 }
 
 async function sendTelegramNotification(title, message, codice = null, imageSrc = null) {
-  const db = readDb();
+  const db = await readDb();
   const token = db.settings.telegramToken;
   const chatId = db.settings.telegramChatId;
   const enabled = db.settings.telegramEnabled;
@@ -178,7 +234,7 @@ let isPollingTelegram = false;
 async function checkTelegramUpdates() {
   if (isPollingTelegram) return;
   
-  const db = readDb();
+  const db = await readDb();
   const token = db.settings.telegramToken;
   const chatId = db.settings.telegramChatId;
   const enabled = db.settings.telegramEnabled;
@@ -218,7 +274,7 @@ async function checkTelegramUpdates() {
 }
 
 async function handleTelegramMessage(message) {
-  const db = readDb();
+  const db = await readDb();
   const configuredChatId = String(db.settings.telegramChatId).trim();
   const senderChatId = String(message.chat.id).trim();
   const token = db.settings.telegramToken;
@@ -299,7 +355,7 @@ async function handleTelegramMessage(message) {
       responseText = `ℹ️ La parola chiave <code>${argument}</code> è già tracciata.`;
     } else {
       db.keywords.push(argument);
-      writeDb(db);
+      await writeDb(db);
       responseText = `✅ Parola chiave <code>${argument}</code> aggiunta con successo!\nOra tracciamo ${db.keywords.length} termini.`;
       console.log(`[Telegram Cmd] Added keyword: ${argument}`);
     }
@@ -310,7 +366,7 @@ async function handleTelegramMessage(message) {
       responseText = `ℹ️ La parola chiave <code>${argument}</code> non è presente nell'elenco.`;
     } else {
       db.keywords = db.keywords.filter(kw => kw !== argument);
-      writeDb(db);
+      await writeDb(db);
       responseText = `✅ Parola chiave <code>${argument}</code> rimossa con successo.\nOra tracciamo ${db.keywords.length} termini.`;
       console.log(`[Telegram Cmd] Removed keyword: ${argument}`);
     }
@@ -333,12 +389,12 @@ async function handleTelegramMessage(message) {
   }
 }
 
-function startTelegramPolling() {
+async function startTelegramPolling() {
   if (telegramPollIntervalId) {
     clearInterval(telegramPollIntervalId);
   }
 
-  const db = readDb();
+  const db = await readDb();
   const enabled = db.settings.telegramEnabled;
   const token = db.settings.telegramToken;
   const chatId = db.settings.telegramChatId;
@@ -350,7 +406,7 @@ function startTelegramPolling() {
 
   console.log('[Telegram Polling] Polling started and listening for remote commands...');
   telegramOffset = -1;
-  checkTelegramUpdates();
+  await checkTelegramUpdates();
   telegramPollIntervalId = setInterval(checkTelegramUpdates, 4000);
 }
 
@@ -362,103 +418,78 @@ function stopTelegramPolling() {
   }
 }
 
-function runMigration() {
-  try {
-    if (fs.existsSync(DB_FILE)) {
-      const data = fs.readFileSync(DB_FILE, 'utf8');
-      const db = JSON.parse(data);
-      
-      // Migrate seenIds from db.json if present
-      if (db.hasOwnProperty('seenIds')) {
-        console.log('[Migration] Migrating seenIds from db.json to seen_ids.json...');
-        
-        const seenData = {
-          lastClearedDate: new Date().toDateString(),
-          ids: Array.isArray(db.seenIds) ? db.seenIds : []
-        };
-        fs.writeFileSync(SEEN_IDS_FILE, JSON.stringify(seenData, null, 2), 'utf8');
-        
-        delete db.seenIds;
-        fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2), 'utf8');
-        
-        console.log('[Migration] Migration successfully completed!');
-      }
-    }
-  } catch (err) {
-    console.error('[Migration] Error during migration:', err);
-  }
-}
-
-function readSeenIds() {
+async function readSeenIds() {
   try {
     const today = new Date().toDateString();
-    if (!fs.existsSync(SEEN_IDS_FILE)) {
-      const initial = {
-        lastClearedDate: today,
-        ids: []
-      };
-      fs.writeFileSync(SEEN_IDS_FILE, JSON.stringify(initial, null, 2), 'utf8');
-      return initial;
+    const res = await pool.query("SELECT value FROM app_preferences WHERE key = 'seen_ids'");
+    if (res.rowCount > 0) {
+      const parsed = res.rows[0].value;
+      if (parsed.lastClearedDate !== today) {
+        console.log(`[Database] Day changed from "${parsed.lastClearedDate}" to "${today}". Resetting seenIds daily list.`);
+        parsed.lastClearedDate = today;
+        parsed.ids = [];
+        await writeSeenIds(parsed);
+      }
+      return parsed;
     }
-    
-    const data = fs.readFileSync(SEEN_IDS_FILE, 'utf8');
-    const parsed = JSON.parse(data);
-    
-    // Reset seenIds daily list if day has changed
-    if (parsed.lastClearedDate !== today) {
-      console.log(`[Database] Day changed from "${parsed.lastClearedDate}" to "${today}". Resetting seenIds daily list.`);
-      parsed.lastClearedDate = today;
-      parsed.ids = [];
-      fs.writeFileSync(SEEN_IDS_FILE, JSON.stringify(parsed, null, 2), 'utf8');
-    }
-    
-    return parsed;
   } catch (err) {
-    console.error('Error reading seen_ids file:', err);
-    return { lastClearedDate: new Date().toDateString(), ids: [] };
+    console.error('Error reading seen_ids from PostgreSQL:', err);
   }
+  return { lastClearedDate: new Date().toDateString(), ids: [] };
 }
 
-function writeSeenIds(data) {
+async function writeSeenIds(data) {
   try {
-    fs.writeFileSync(SEEN_IDS_FILE, JSON.stringify(data, null, 2), 'utf8');
+    await pool.query("INSERT INTO app_preferences (key, value) VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value", ['seen_ids', data]);
     return true;
   } catch (err) {
-    console.error('Error writing to seen_ids file:', err);
+    console.error('Error writing seen_ids to PostgreSQL:', err);
     return false;
   }
 }
 
-function writeDb(data) {
+async function writeDb(data) {
   try {
-    fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2), 'utf8');
+    await pool.query("INSERT INTO app_preferences (key, value) VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value", ['db', data]);
     return true;
   } catch (err) {
-    console.error('Error writing to database file:', err);
+    console.error('Error writing database to PostgreSQL:', err);
     return false;
   }
 }
 
-function readAllDaily() {
+async function readAllDaily() {
   try {
-    if (!fs.existsSync(ALL_DAILY_FILE)) {
-      fs.writeFileSync(ALL_DAILY_FILE, JSON.stringify([], null, 2), 'utf8');
-      return [];
-    }
-    const data = fs.readFileSync(ALL_DAILY_FILE, 'utf8');
-    return JSON.parse(data);
+    const res = await pool.query("SELECT data FROM all_daily_products ORDER BY timestamp_scraped DESC");
+    return res.rows.map(r => r.data);
   } catch (err) {
-    console.error('Error reading all_daily database file:', err);
+    console.error('Error reading all_daily from PostgreSQL:', err);
     return [];
   }
 }
 
-function writeAllDaily(data) {
+async function writeAllDaily(data) {
   try {
-    fs.writeFileSync(ALL_DAILY_FILE, JSON.stringify(data, null, 2), 'utf8');
-    return true;
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      await client.query("DELETE FROM all_daily_products");
+      for (const item of data) {
+        await client.query(
+          "INSERT INTO all_daily_products (id, data, timestamp_scraped) VALUES ($1, $2, $3) ON CONFLICT (id) DO UPDATE SET data = EXCLUDED.data", 
+          [item.id, item, item.timestampScraped || new Date().toISOString()]
+        );
+      }
+      await client.query("COMMIT");
+      return true;
+    } catch (err) {
+      await client.query("ROLLBACK");
+      throw err;
+    } finally {
+      client.release();
+    }
   } catch (err) {
-    console.error('Error writing to all_daily database file:', err);
+    console.error('Error writing all_daily to PostgreSQL:', err);
     return false;
   }
 }
@@ -466,9 +497,8 @@ function writeAllDaily(data) {
 // ==========================================
 // MACOS NOTIFICATION SYSTEMS (Dual Mode)
 // ==========================================
-function sendDesktopNotification(title, message, codice = null) {
-  const db = readDb();
-  const sound = db.settings.soundEnabled ? 'Glass' : false;
+function sendDesktopNotification(title, message, codice = null, soundEnabled = true) {
+  const sound = soundEnabled ? 'Glass' : false;
   const productUrl = codice ? `https://www.newoldcamera.com/Scheda.aspx?Codice=${codice}` : null;
 
   console.log(`[Notification] Dispatching alert: "${title}" - "${message}"`);
@@ -557,7 +587,7 @@ async function checkNewProducts() {
   const now = new Date();
   const currentHour = now.getHours();
   const todayDateString = now.toDateString();
-  const db = readDb();
+  const db = await readDb();
 
   // Auto-clear logic after 20:00 or when a new day starts
   const isNewDay = db.lastDailyClearDate !== todayDateString;
@@ -570,14 +600,14 @@ async function checkNewProducts() {
     db.history = [];
     db.lastDailyClearDate = todayDateString;
     db.lastDailyClearHour = currentHour;
-    writeDb(db);
+    await writeDb(db);
 
-    writeAllDaily([]);
+    await writeAllDaily([]);
 
-    const seenData = readSeenIds();
+    const seenData = await readSeenIds();
     seenData.ids = [];
     seenData.lastClearedDate = todayDateString;
-    writeSeenIds(seenData);
+    await writeSeenIds(seenData);
   }
 
   const settings = db.settings;
@@ -611,19 +641,19 @@ async function checkNewProducts() {
 
     console.log(`[Scraper] Successfully loaded ${products.length} products from site.`);
 
-    const seenData = readSeenIds();
+    const seenData = await readSeenIds();
     const isFirstBoot = seenData.ids.length === 0;
     let seenModified = false;
     let dbModified = false;
 
-    const allDailyData = readAllDaily();
+    const allDailyData = await readAllDaily();
     let allDailyModified = false;
 
     // Loop through retrieved items
     for (const item of products) {
       const itemId = item.id;
 
-      // Save all products to all_daily.json if not already present
+      // Save all products to database if not already present
       const existsInAllDaily = allDailyData.some(p => p.id === itemId);
       if (!existsInAllDaily) {
         allDailyData.unshift({
@@ -738,7 +768,7 @@ async function checkNewProducts() {
 
               // Trigger Desktop macOS notification if enabled
               if (settings.desktopEnabled !== false) {
-                sendDesktopNotification(title, message, item.codice);
+                sendDesktopNotification(title, message, item.codice, settings.soundEnabled !== false);
               }
 
               // Trigger Telegram Bot notification if enabled
@@ -768,15 +798,15 @@ async function checkNewProducts() {
     }
 
     if (seenModified) {
-      writeSeenIds(seenData);
+      await writeSeenIds(seenData);
     }
 
     if (dbModified) {
-      writeDb(db);
+      await writeDb(db);
     }
 
     if (allDailyModified) {
-      writeAllDaily(allDailyData);
+      await writeAllDaily(allDailyData);
     }
 
     lastCheckedTime = new Date().toISOString();
@@ -791,12 +821,12 @@ async function checkNewProducts() {
 // ==========================================
 // SCHEDULING WRAPPER
 // ==========================================
-function startPolling() {
+async function startPolling() {
   if (checkTimeoutId) {
     clearInterval(checkTimeoutId);
   }
 
-  const db = readDb();
+  const db = await readDb();
   const intervalMs = (db.settings.intervalMinutes || 5) * 60 * 1000;
 
   console.log(`[Scheduler] Polling scheduled to run every ${db.settings.intervalMinutes} minutes.`);
@@ -808,10 +838,16 @@ function startPolling() {
   checkTimeoutId = setInterval(checkNewProducts, intervalMs);
 }
 
-// Initialize database, run migrations & Start scheduling on server load
-runMigration();
-startPolling();
-startTelegramPolling();
+// Initialize database, seed data & Start scheduling on server load
+(async () => {
+  try {
+    await initDb();
+    await startPolling();
+    await startTelegramPolling();
+  } catch (err) {
+    console.error('[Startup] Failed to start server components:', err);
+  }
+})();
 
 function requireAdminPassword(req, res, next) {
   const password = process.env.ADMIN_PASSWORD;
@@ -832,8 +868,8 @@ function requireAdminPassword(req, res, next) {
 // ==========================================
 
 // Get operational status
-app.get('/api/status', (req, res) => {
-  const db = readDb();
+app.get('/api/status', async (req, res) => {
+  const db = await readDb();
   
   let nextCheckInSeconds = 0;
   if (checkTimeoutId && db.settings.enabled) {
@@ -847,7 +883,7 @@ app.get('/api/status', (req, res) => {
     }
   }
 
-  const seenData = readSeenIds();
+  const seenData = await readSeenIds();
 
   res.json({
     enabled: db.settings.enabled,
@@ -864,18 +900,18 @@ app.get('/api/status', (req, res) => {
 });
 
 // Keywords CRUD
-app.get('/api/keywords', requireAdminPassword, (req, res) => {
-  const db = readDb();
+app.get('/api/keywords', requireAdminPassword, async (req, res) => {
+  const db = await readDb();
   res.json({ keywords: db.keywords });
 });
 
-app.post('/api/keywords', requireAdminPassword, (req, res) => {
+app.post('/api/keywords', requireAdminPassword, async (req, res) => {
   const { keywords } = req.body;
   if (!Array.isArray(keywords)) {
     return res.status(400).json({ error: 'Keywords must be an array.' });
   }
 
-  const db = readDb();
+  const db = await readDb();
   db.keywords = keywords.map(kw => {
     if (typeof kw === 'object' && kw !== null) {
       return {
@@ -893,32 +929,32 @@ app.post('/api/keywords', requireAdminPassword, (req, res) => {
     return text && text.length > 0;
   });
 
-  writeDb(db);
+  await writeDb(db);
   console.log('[API] Tracked keywords updated:', db.keywords);
   res.json({ success: true, keywords: db.keywords });
 });
 
 // History CRUD
-app.get('/api/history', (req, res) => {
-  const db = readDb();
+app.get('/api/history', async (req, res) => {
+  const db = await readDb();
   res.json({ history: db.history });
 });
 
 // All daily products list
-app.get('/api/all-daily', (req, res) => {
-  const allDaily = readAllDaily();
+app.get('/api/all-daily', async (req, res) => {
+  const allDaily = await readAllDaily();
   res.json({ products: allDaily });
 });
 
-app.delete('/api/history', requireAdminPassword, (req, res) => {
-  const db = readDb();
+app.delete('/api/history', requireAdminPassword, async (req, res) => {
+  const db = await readDb();
   db.history = [];
-  writeDb(db);
+  await writeDb(db);
   res.json({ success: true, message: 'Match history cleared.' });
 });
 
 // Reset matching history and seen IDs cache
-app.post('/api/reset-all', requireAdminPassword, (req, res) => {
+app.post('/api/reset-all', requireAdminPassword, async (req, res) => {
   try {
     console.log('[API] Reset cache and history requested.');
     
@@ -927,15 +963,15 @@ app.post('/api/reset-all', requireAdminPassword, (req, res) => {
       lastClearedDate: new Date().toDateString(),
       ids: []
     };
-    writeSeenIds(seenData);
+    await writeSeenIds(seenData);
 
     // Clear history
-    const db = readDb();
+    const db = await readDb();
     db.history = [];
-    writeDb(db);
+    await writeDb(db);
 
     // Clear all_daily database
-    writeAllDaily([]);
+    await writeAllDaily([]);
 
     res.json({ success: true, message: 'Cronologia, cache e database dei prodotti di tutti i giorni resettati con successo.' });
   } catch (err) {
@@ -945,18 +981,18 @@ app.post('/api/reset-all', requireAdminPassword, (req, res) => {
 });
 
 // Settings REST
-app.get('/api/settings', requireAdminPassword, (req, res) => {
-  const db = readDb();
+app.get('/api/settings', requireAdminPassword, async (req, res) => {
+  const db = await readDb();
   res.json({ settings: db.settings });
 });
 
-app.post('/api/settings', requireAdminPassword, (req, res) => {
+app.post('/api/settings', requireAdminPassword, async (req, res) => {
   const { settings } = req.body;
   if (!settings || typeof settings !== 'object') {
     return res.status(400).json({ error: 'Settings object is required.' });
   }
 
-  const db = readDb();
+  const db = await readDb();
   const oldInterval = db.settings.intervalMinutes;
   const oldTelegramEnabled = db.settings.telegramEnabled;
   const oldTelegramToken = db.settings.telegramToken;
@@ -976,12 +1012,12 @@ app.post('/api/settings', requireAdminPassword, (req, res) => {
     telegramChatId: typeof settings.telegramChatId === 'string' ? settings.telegramChatId.trim() : ''
   };
 
-  writeDb(db);
+  await writeDb(db);
   console.log('[API] Settings updated successfully.');
 
   // Restart scheduler if interval changed or enabled toggled
   if (oldInterval !== db.settings.intervalMinutes || settings.enabled !== undefined) {
-    startPolling();
+    await startPolling();
   }
 
   // Restart Telegram Polling if Telegram settings changed
@@ -989,7 +1025,7 @@ app.post('/api/settings', requireAdminPassword, (req, res) => {
       oldTelegramToken !== db.settings.telegramToken || 
       oldTelegramChatId !== db.settings.telegramChatId) {
     if (db.settings.telegramEnabled) {
-      startTelegramPolling();
+      await startTelegramPolling();
     } else {
       stopTelegramPolling();
     }
@@ -1006,12 +1042,14 @@ app.post('/api/trigger-check', requireAdminPassword, async (req, res) => {
 });
 
 // Trigger a local test notification
-app.post('/api/test-notification', requireAdminPassword, (req, res) => {
+app.post('/api/test-notification', requireAdminPassword, async (req, res) => {
   console.log('[API] Test notification requested.');
+  const db = await readDb();
   sendDesktopNotification(
     'NOC Monitor: Test Alert 📸',
     'La configurazione delle notifiche macOS è attiva e funzionante al 100%!',
-    '26C0933' // Test with a real code to verify product links
+    '26C0933', // Test with a real code to verify product links
+    db.settings.soundEnabled !== false
   );
   res.json({ success: true, message: 'Test notification triggered successfully.' });
 });
@@ -1019,7 +1057,7 @@ app.post('/api/test-notification', requireAdminPassword, (req, res) => {
 // Trigger a local test telegram notification (allows dry-run parameters)
 app.post('/api/test-telegram', requireAdminPassword, async (req, res) => {
   const { telegramToken, telegramChatId } = req.body;
-  const db = readDb();
+  const db = await readDb();
   
   const token = telegramToken !== undefined ? telegramToken.trim() : db.settings.telegramToken;
   const chatId = telegramChatId !== undefined ? telegramChatId.trim() : db.settings.telegramChatId;

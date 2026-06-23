@@ -4,15 +4,9 @@ services:
     container_name: nocamera-news
     ports:
       - "3010:3000"
-    volumes:
-      # Mount db.json to persist search keywords, settings, and match history
-      - ./db.json:/app/db.json
-      # Mount seen_ids.json to persist daily scraper track list
-      - ./seen_ids.json:/app/seen_ids.json
-      # Mount all_daily.json to persist all scraped daily products
-      - ./all_daily.json:/app/all_daily.json
     restart: unless-stopped
     environment:
       - NODE_ENV=production
       - PORT=3000
-      - ADMIN_PASSWORD=InsertPasswordHere
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD}
+      - DATABASE_URL=postgresql://${DB_USER}:${DB_PASSWORD}@${DB_HOST}:${DB_PORT}/${DB_NAME}

@@ -22,49 +22,56 @@ Il sistema interroga in modo estremamente leggero l'API del sito, filtra i prodo
 
 ---
 
-## 🛠️ Architettura dei File
+## 🛠️ Architettura dei File e Database
 
 *   `server.js`: Il server backend Node.js (Express) che gestisce il crawler periodico, le notifiche e le API REST per la dashboard.
-*   `db.json`: Database JSON locale ultra-leggero che memorizza lo stato delle notifiche già inviate (`seenIds`), la cronologia dei match, le parole chiave e le impostazioni del timer.
+*   **Database PostgreSQL**: Il sistema si basa su un database relazionale composto da due tabelle principali:
+    *   `app_preferences`: Memorizza le preferenze dell'applicazione (impostazioni, parole chiave e cronologia) in formato JSONB.
+    *   `all_daily_products`: Memorizza tutti gli articoli trovati durante la giornata, identificati univocamente da `id`. Questa tabella viene svuotata automaticamente la notte (dopo le 20:00 o al cambio del giorno).
 *   `public/`: La cartella contenente l'interfaccia frontend (HTML, CSS con stili premium e file JS interattivo).
-*   `Dockerfile` & `docker-compose.yml`: File di configurazione per containerizzare l'applicazione in un clic.
+*   `Dockerfile` & `docker-compose.yml`: File di configurazione per containerizzare l'applicazione e avviare il database PostgreSQL in un clic.
 
 ---
 
 ## 💻 Esecuzione Locale (Con Notifiche macOS Funzionanti)
 
-Per godere delle notifiche native macOS direttamente sul tuo desktop, è necessario eseguire il server in locale:
+Per godere delle notifiche native macOS direttamente sul tuo desktop, è necessario eseguire il server in locale ed avere un'istanza PostgreSQL attiva:
 
-1. **Installazione delle dipendenze:**
+1. **Avviare PostgreSQL:** Assicurarsi che PostgreSQL sia in esecuzione (ad esempio tramite Docker o installazione locale) e definire la variabile d'ambiente `DATABASE_URL` nel terminale.
+   ```bash
+   export DATABASE_URL=postgresql://postgres:postgrespassword@localhost:5432/nocameranews
+   ```
+
+2. **Installazione delle dipendenze:**
    ```bash
    npm install
    ```
 
-2. **Avvio del server:**
+3. **Avvio del server:**
    ```bash
    npm start
    ```
 
-3. **Accesso alla Dashboard:**
+4. **Accesso alla Dashboard:**
    Apri sul tuo browser l'indirizzo: **`http://localhost:3000`**
 
 ---
 
-## 🐳 Esecuzione tramite Docker (Consigliata per Server/NAS)
+## 🐳 Esecuzione tramite Docker (Consigliata)
 
-Se vuoi che il monitor sia attivo h24 su una macchina Linux, un NAS o un server remoto senza dipendere dal tuo computer personale:
+Se vuoi eseguire il monitor completo (app + database) in modo isolato:
 
 1. **Avvio dei container:**
    ```bash
    docker compose up -d --build
    ```
 
-2. **Gestione del database (`db.json`):**
-   Il file `db.json` è montato come volume. Le impostazioni e la cronologia dei match rimarranno salvate anche se distruggi o riavvii il container.
+2. **Persistenza dei Dati:**
+   Il volume PostgreSQL `pgdata` è configurato per persistere tutti i dati di impostazione, cronologia e stato del crawler anche dopo il riavvio o lo spegnimento dei container.
 
 3. **Visualizzazione dei log:**
    ```bash
    docker compose logs -f
    ```
 
-*Nota: In ambiente Docker (Linux), le notifiche desktop native di macOS non verranno visualizzate, ma tutti gli avvisi continueranno ad essere registrati correttamente nel database e saranno consultabili in qualsiasi momento dalla dashboard.*
+*Nota: In ambiente Docker (Linux), le notifiche desktop native di macOS non verranno visualizzate, ma tutti gli avvisi continueranno ad essere registrati correttamente nel database e saranno consultabili in qualsiasi momento dalla dashboard o tramite bot Telegram.*
