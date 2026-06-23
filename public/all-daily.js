@@ -13,7 +13,8 @@ const el = {
   statusText: document.getElementById('statusText'),
   lastChecked: document.getElementById('lastChecked'),
   productsCount: document.getElementById('productsCount'),
-  productsGrid: document.getElementById('productsGrid')
+  productsGrid: document.getElementById('productsGrid'),
+  filterInput: document.getElementById('filterInput')
 };
 
 // ==========================================
@@ -22,6 +23,14 @@ const el = {
 document.addEventListener('DOMContentLoaded', async () => {
   // Show skeleton cards during initial load
   showSkeletons();
+  
+  // Attach input event listener for text filtering
+  if (el.filterInput) {
+    el.filterInput.addEventListener('input', (e) => {
+      state.filterText = e.target.value.toLowerCase().trim();
+      renderProducts();
+    });
+  }
   
   // Initial data fetch
   await fetchProducts();
@@ -102,21 +111,32 @@ function showSkeletons() {
 
 // Render Scraped Products Feed
 function renderProducts() {
-  el.productsCount.textContent = state.products.length;
+  const filterText = state.filterText || '';
+  const filteredProducts = state.products.filter(item => {
+    if (!filterText) return true;
+    const brand = (item.marca || '').toLowerCase();
+    const model = (item.modello || '').toLowerCase();
+    const code = (item.codice || '').toLowerCase();
+    const condition = (item.stato || '').toLowerCase();
+    const combinedText = `${brand} ${model} ${code} ${condition}`;
+    return combinedText.includes(filterText);
+  });
+
+  el.productsCount.textContent = filteredProducts.length;
   el.productsGrid.innerHTML = '';
 
-  if (state.products.length === 0) {
+  if (filteredProducts.length === 0) {
     el.productsGrid.innerHTML = `
       <div class="empty-state" style="grid-column: 1 / -1; text-align: center; padding: 60px 20px;">
         <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="margin-bottom: 16px; color: var(--text-muted);"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
         <h3 style="font-family: 'Montserrat', sans-serif; font-size: 1.25rem; font-weight: 700; margin-bottom: 8px;">Nessun Prodotto Rilevato</h3>
-        <p style="color: var(--text-secondary); max-width: 500px; margin: 0 auto; font-size: 0.85rem;">Nessun prodotto è stato ancora pubblicato sul sito oggi, oppure il database è stato recentemente azzerato.</p>
+        <p style="color: var(--text-secondary); max-width: 500px; margin: 0 auto; font-size: 0.85rem;">Nessun prodotto corrisponde ai criteri di ricerca, oppure il database è stato recentemente azzerato.</p>
       </div>
     `;
     return;
   }
 
-  state.products.forEach(item => {
+  filteredProducts.forEach(item => {
     const card = document.createElement('article');
     card.className = 'glass-card product-card';
     

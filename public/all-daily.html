@@ -26,6 +26,49 @@
     .back-link:hover {
       color: var(--primary);
     }
+
+    .filter-section {
+      background: rgba(17, 25, 40, 0.45);
+      border: 1px solid var(--card-border);
+      border-radius: var(--radius-md);
+      padding: 16px;
+      margin-bottom: 24px;
+      backdrop-filter: blur(10px);
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      transition: var(--transition);
+    }
+    
+    .filter-section:focus-within {
+      border-color: rgba(245, 158, 11, 0.2);
+      box-shadow: 0 0 15px rgba(245, 158, 11, 0.08);
+    }
+
+    .search-wrapper {
+      position: relative;
+      flex: 1;
+    }
+
+    .search-icon {
+      position: absolute;
+      left: 16px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--text-muted);
+      pointer-events: none;
+      transition: var(--transition);
+    }
+
+    .search-wrapper input[type="text"] {
+      padding-left: 48px;
+      width: 100%;
+      border-radius: var(--radius-sm);
+    }
+    
+    .search-wrapper input[type="text"]:focus + .search-icon {
+      color: var(--primary);
+    }
   </style>
 </head>
 <body>
@@ -75,6 +118,14 @@
             <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="9" y1="3" x2="9" y2="21"></line></svg>
             <h2>Tutti i Prodotti Rilevati Oggi</h2>
             <span class="counter-badge" id="productsCount">0</span>
+          </div>
+        </div>
+
+        <!-- Filter Bar -->
+        <div class="filter-section">
+          <div class="search-wrapper">
+            <input type="text" id="filterInput" placeholder="Filtra prodotti per marca, modello, codice o stato..." autocomplete="off">
+            <svg class="search-icon" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
           </div>
         </div>
 
