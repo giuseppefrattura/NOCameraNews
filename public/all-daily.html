@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NOCameraNews - Tutti i Prodotti di Oggi</title>
+  <link rel="icon" type="image/png" href="favicon.png">
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Montserrat:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <!-- Stylesheet -->
+  <link rel="stylesheet" href="index.css">
+  <style>
+    .back-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--text-secondary);
+      text-decoration: none;
+      font-size: 0.9rem;
+      font-weight: 600;
+      transition: var(--transition);
+    }
+
+    .back-link:hover {
+      color: var(--primary);
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Background Blur Orbs for visual wow factor -->
+  <div class="bg-orb orb-1"></div>
+  <div class="bg-orb orb-2"></div>
+  <div class="bg-orb orb-3"></div>
+
+  <div class="app-container">
+    <!-- Header -->
+    <header class="app-header">
+      <div class="logo-area">
+        <span class="logo-icon">📸</span>
+        <h1>NOCamera<span class="gradient-text">News</span></h1>
+        <span class="badge badge-premium">Tutti i Prodotti</span>
+      </div>
+      
+      <!-- Live Monitoring Stats Pill -->
+      <div class="status-banner" id="statusBanner">
+        <div class="status-indicator">
+          <span class="status-dot pulsing" id="statusDot"></span>
+          <span class="status-text" id="statusText">Verifica in corso...</span>
+        </div>
+        <div class="divider"></div>
+        <div class="stat-item">
+          <span class="stat-label">Ultimo Check:</span>
+          <span class="stat-value" id="lastChecked">Mai</span>
+        </div>
+      </div>
+
+      <!-- Quick Action Buttons -->
+      <div class="header-actions">
+        <a href="index.html" class="back-link">
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+          Torna al Dashboard
+        </a>
+      </div>
+    </header>
+
+    <!-- Main Layout -->
+    <main class="app-main single-column">
+      <!-- Right Pane: Match Feed -->
+      <section class="feed-section">
+        <div class="feed-header">
+          <div class="feed-title">
+            <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="9" y1="3" x2="9" y2="21"></line></svg>
+            <h2>Tutti i Prodotti Rilevati Oggi</h2>
+            <span class="counter-badge" id="productsCount">0</span>
+          </div>
+        </div>
+
+        <!-- Products Grid -->
+        <div class="history-grid" id="productsGrid">
+          <!-- Dynamically populated skeleton loader -->
+          <div class="skeleton-card"></div>
+          <div class="skeleton-card"></div>
+          <div class="skeleton-card"></div>
+        </div>
+      </section>
+
+    </main>
+
+    <!-- Footer -->
+    <footer class="app-footer">
+      <p>&copy; 2026 - Creato con cura per il monitoraggio di New Old Camera Milano. Tutti i diritti riservati.</p>
+    </footer>
+  </div>
+
+  <script src="all-daily.js"></script>
+</body>
+</html>

@@ -1,7 +1,7 @@
 {
   "keywords": [],
   "history": [],
-  "lastDailyClearDate": "Mon Jun 22 2026",
+  "lastDailyClearDate": "Tue Jun 23 2026",
   "settings": {
     "intervalMinutes": 30,
     "activeHoursStart": 9,
@@ -20,5 +20,5 @@
     "telegramChatId": "",
     "desktopEnabled": true
   },
-  "lastDailyClearHour": 22
+  "lastDailyClearHour": 8
 }
