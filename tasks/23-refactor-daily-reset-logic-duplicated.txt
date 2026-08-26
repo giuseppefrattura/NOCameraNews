@@ -1,0 +1,22 @@
+TASK #23 - Refactor: logica di reset giornaliero duplicata
+==========================================================
+TIPO:     Code smell - responsabilità doppia
+PRIORITÀ: Bassa
+STATO:    Da fare
+
+DESCRIZIONE:
+Il reset giornaliero esiste in DUE punti indipendenti che possono
+interferire:
+1) readSeenIds(): se lastClearedDate != oggi svuota seen_ids;
+2) checkNewProducts(): auto-clear su nuovo giorno o dopo le 20:00 che
+   svuota history + all_daily + seen_ids.
+Due meccanismi con condizioni diverse (solo cambio data vs anche
+oraria) sullo stesso dato: facile romperne uno modificando l'altro.
+
+POSIZIONE:
+- server.js:421-439 (readSeenIds con reset interno)
+- server.js:592-611 (auto-clear in checkNewProducts)
+
+SOLUZIONE PROPOSTA:
+Centralizzare in clearDailyData(reason) unico invocato da UN punto di
+decisione; readSeenIds deve restare una lettura pura.

@@ -1,0 +1,21 @@
+TASK #14 - Refactor: renderer card prodotto duplicato (~100 righe x2)
+=====================================================================
+TIPO:     Code smell - duplicazione massiva
+PRIORITÀ: Bassa
+STATO:    Da fare
+
+DESCRIZIONE:
+La logica di rendering di una card prodotto è duplicata quasi
+identica tra la dashboard e la pagina all-daily: badge marca (con
+classi leica/nikon/canon/sony), blocco prezzo con promo, builder URL
+immagine + placeholder, badge PRENOTATO/stato/NUOVO, timestamp
+relativo e l'intero markup HTML della card.
+
+POSIZIONE:
+- public/index.js:306-398     (renderHistory)
+- public/all-daily.js:139-230 (renderProducts)
+
+SOLUZIONE PROPOSTA:
+Estrarre public/shared.js (o common.js) con buildProductCard(item,
+options) usata da entrambe le pagine; differenza attuale: il badge
+MATCH presente solo nella dashboard → gestirlo con opzione.

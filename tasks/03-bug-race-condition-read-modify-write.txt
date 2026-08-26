@@ -1,0 +1,25 @@
+TASK #03 - Bug: race condition read-modify-write sul database
+=============================================================
+TIPO:     Bug di concorrenza / perdita dati
+PRIORITÀ: Alta
+STATO:    Completato
+
+DESCRIZIONE:
+Ogni mutazione segue il pattern readDb() -> modifica in memoria ->
+writeDb() SENZA atomicità. Scritture concorrenti (ciclo di scraping,
+comandi Telegram /add-/remove, API web keywords/settings) si
+sovrascrivono a vicenda: es. una keyword aggiunta via Telegram durante
+una scansione può essere ANNULLATA quando il crawler riscrive la sua
+copia obsoleta dell'intero documento JSONB.
+
+POSIZIONE:
+- server.js:107-143  (readDb)
+- server.js:451-459  (writeDb)
+- server.js:584-819  (checkNewProducts: read iniziale, write finale lungo)
+- server.js:357-360  (comando Telegram /add)
+
+SOLUZIONE PROPOSTA:
+Introdurre una coda/mutex asincrona attorno ai blocchi
+read-modify-write (es. funzione withDbLock(fn)) OPPURE usare UPDATE
+atomici SQL (jsonb_set / SELECT ... FOR UPDATE in transazione).
+A breve termine: serializzare le scritture con una Promise chain globale.

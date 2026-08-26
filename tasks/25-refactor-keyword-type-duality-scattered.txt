@@ -1,0 +1,25 @@
+TASK #25 - Refactor: dualità keyword string|object dispersa nel codice
+======================================================================
+TIPO:     Code smell - modello dati ambiguo
+PRIORITÀ: Bassa
+STATO:    Da fare
+
+DESCRIZIONE:
+Le keyword possono essere stringhe ("LEICA") oppure oggetti
+({text, minPrice, maxPrice, exclude}); OGNI punto che le usa deve fare
+il check typeof kw === 'object' ? kw.text : kw. Il pattern è disperso
+in almeno 6+ posizioni tra server e client, con rischio di dimenticare
+un caso.
+
+POSIZIONE:
+- server.js:691-701      (matching crawler)
+- public/settings.js:565-566 (renderKeywords)
+- public/settings.js:601-603 (openFilterModal)
+- public/settings.js:642-643 (handleFilterSubmit)
+- public/settings.js:713-715 (handleAddKeyword exists-check)
+- public/settings.js:771-773 (deleteKeyword filter)
+
+SOLUZIONE PROPOSTA:
+Normalizzare SEMPRE a oggetto lato server (lettura in readDb + POST
+/api/keywords), migrando i vecchi dati; semplificare poi tutto il
+codice client/server che assume solo la forma {text,...}.

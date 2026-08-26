@@ -1,0 +1,20 @@
+TASK #21 - Refactor: fallback sendPhoto→sendMessage Telegram duplicato
+======================================================================
+TIPO:     Code smell - duplicazione
+PRIORITÀ: Bassa
+STATO:    Da fare
+
+DESCRIZIONE:
+Il pattern "prova sendPhoto, se fallisce fallback a sendMessage" con
+caption HTML + inline keyboard è scritto due volte: nella notifica
+reale e nell'endpoint di test. Bugfix o cambiamenti all'API Telegram
+vanno applicati due volte.
+
+POSIZIONE:
+- server.js:180-225  (sendTelegramNotification)
+- server.js:1088-1126 (endpoint POST /api/test-telegram)
+
+SOLUZIONE PROPOSTA:
+Estrarre dispatchTelegram(token, chatId, { photoUrl?, captionHtml,
+keyboard }) usata sia dalla notifica sia dal test (che passa solo
+parametri diversi).

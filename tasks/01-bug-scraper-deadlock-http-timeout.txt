@@ -1,0 +1,21 @@
+TASK #01 - Bug critico: deadlock dello scraper per assenza di timeout HTTP
+===========================================================================
+TIPO:     Bug critico
+PRIORITÀ: Alta
+STATO:    Completato
+
+DESCRIZIONE:
+fetchProductList() usa https.get senza alcun timeout. Se l'API remota
+accetta la connessione ma non risponde mai, la Promise non si risolve,
+la variabile isCheckingNow resta bloccata su true e TUTTE le scansioni
+future vengono silenziosamente saltate fino al riavvio del server.
+
+POSIZIONE:
+- server.js:549-582 (https.get senza timeout)
+- server.js:585 (guardia isCheckingNow che blocca per sempre)
+
+SOLUZIONE PROPOSTA:
+Aggiungere un timeout alla richiesta (es. req.setTimeout(15000) oppure
+AbortController con setTimeout). In caso di timeout chiamare req.destroy()
+e reject() dell'errore; il blocco finally di checkNewProducts rilascerà
+correttamente isCheckingNow.

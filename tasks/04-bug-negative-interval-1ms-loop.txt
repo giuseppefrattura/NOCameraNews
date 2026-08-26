@@ -1,0 +1,21 @@
+TASK #04 - Bug: intervallo negativo → loop di scraping ogni ~1ms
+================================================================
+TIPO:     Bug di validazione input / auto-DoS verso il sito target
+PRIORITÀ: Alta
+STATO:    Completato (validazione strict con HTTP 400)
+
+DESCRIZIONE:
+POST /api/settings accetta qualunque numero per intervalMinutes:
+Number(-1) || 5 restituisce -1 (il fallback || 5 scatta solo per 0/NaN).
+setInterval(fn, -60000) in Node scatta ogni ~1ms: il crawler martella
+l'API di New Old Camera. Nessuna validazione anche su activeHoursStart/
+End (0-23) e activeDays.
+
+POSIZIONE:
+- server.js:1003-1006 (merge settings senza validazione range)
+- server.js:830       (intervalMs usato in setInterval)
+
+SOLUZIONE PROPOSTA:
+Validare i campi numerici nel POST /api/settings: intervalMinutes >= 1
+(es. clamp 1-1440), ore 0-23 con start < end, giorni 0-6. Restituire
+400 con messaggio d'errore in caso contrario.

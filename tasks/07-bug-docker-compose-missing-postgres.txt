@@ -1,0 +1,22 @@
+TASK #07 - Bug: docker-compose privo di servizio postgres (README fuorviante)
+=============================================================================
+TIPO:     Bug di configurazione / documentazione
+PRIORITÀ: Media
+STATO:    Da fare
+
+DESCRIZIONE:
+Il README promette l'avvio completo "app + database PostgreSQL in un
+clic" con docker compose up, ma docker-compose.yml definisce SOLO il
+servizio nocamera-news: DATABASE_URL punta a ${DB_HOST} preso da .env
+(default localhost, che DENTRO il container non punta al DB).
+Il volume pgdata citato dal README non esiste.
+
+POSIZIONE:
+- docker-compose.yml (intero file, manca il servizio db)
+- README.md sezione "Esecuzione tramite Docker"
+
+SOLUZIONE PROPOSTA:
+Aggiungere il servizio postgres:16-alpine con volume pgdata, variabili
+POSTGRES_*, healthcheck pg_isready e depends_on condition
+service_healthy; impostare DB_HOST=postgres nel compose; aggiornare
+.env.example e il README.

@@ -1,0 +1,21 @@
+TASK #08 - Bug: replay degli aggiornamenti Telegram dopo ogni riavvio polling
+=============================================================================
+TIPO:     Bug funzionale
+PRIORITÀ: Media
+STATO:    Da fare
+
+DESCRIZIONE:
+telegramOffset viene resettato a -1 ad ogni avvio del polling
+(startTelegramPolling). Il polling riparte a OGNI salvataggio delle
+impostazioni (POST /api/settings) e a ogni riavvio del server: gli
+update Telegram ancora pendenti vengono RIESEGUITI, generando risposte
+e comandi duplicati (es. vecchi /status o /add rieseguiti).
+
+POSIZIONE:
+- server.js:231  (telegramOffset globale)
+- server.js:408  (reset telegramOffset = -1)
+- server.js:1024-1032 (restart polling su cambio impostazioni)
+
+SOLUZIONE PROPOSTA:
+Persistere l'ultimo offset confermato in app_preferences (chiave
+'telegram_offset') e inizializzare telegramOffset da lì invece di -1.

@@ -1,0 +1,20 @@
+TASK #11 - Performance/UX: re-render completo della griglia all-daily ogni 5s
+=============================================================================
+TIPO:     Performance / UX
+PRIORITÀ: Bassa
+STATO:    Da fare
+
+DESCRIZIONE:
+all-daily.js ricrea TUTTA la griglia prodotti ogni 5 secondi:
+le immagini ricaricano (sfarfallio), la posizione di scroll si perde,
+e le fetch periodiche non hanno guardia anti-sovrapposizione (una
+fetch lenta ne accumula altre).
+
+POSIZIONE:
+- public/all-daily.js:91-98   (setInterval senza guardia)
+- public/all-daily.js:113-231 (renderProducts ricrea tutto)
+
+SOLUZIONE PROPOSTA:
+Calcolare un hash/fingerprint dei dati (es. lista id+timestamp) e
+ri-renderizzare solo se cambiati; aggiungere flag isLoading per
+evitare fetch sovrapposte; eventualmente aggiornare i nodi esistenti.

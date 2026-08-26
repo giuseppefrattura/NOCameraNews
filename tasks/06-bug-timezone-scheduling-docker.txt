@@ -1,0 +1,23 @@
+TASK #06 - Bug: scheduling dipendente dal timezone del server/Docker
+====================================================================
+TIPO:     Bug funzionale
+PRIORITÀ: Media
+STATO:    Da fare
+
+DESCRIZIONE:
+Le finestre attive (activeHoursStart/End, reset post-20:00) usano
+new Date().getHours(), cioè l'ora LOCALE del processo. Nel container
+Docker (node:20-alpine) il timezone è UTC: per un utente italiano la
+finestra "08-20" diventa di fatto 09-21 CET / 10-22 CEST e l'auto-clear
+"after 20:00" scatta all'ora sbagliata.
+
+POSIZIONE:
+- server.js:587-594 (currentHour, isAfterEightPM)
+- server.js:621-629 (controllo finestra attiva)
+- Dockerfile (nessuna TZ impostata)
+- docker-compose.yml (nessuna TZ)
+
+SOLUZIONE PROPOSTA:
+Impostare TZ=Europe/Rome nell'immagine Docker e in docker-compose
+(environment + ln -sf /usr/share/zoneinfo/... se serve su alpine),
+oppure calcolare l'ora italiana con Intl.DateTimeFormat esplicito.

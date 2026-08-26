@@ -1,0 +1,24 @@
+TASK #24 - Refactor: oggetto settings di default definito 3 volte
+=================================================================
+TIPO:     Code smell - duplicazione
+PRIORITÀ: Bassa
+STATO:    Da fare
+
+DESCRIZIONE:
+I valori di default delle impostazioni esistono in tre posti:
+1) seed iniziale in initDb();
+2) merge nel POST /api/settings (fallback inline per ogni campo);
+3) fallback lato client in populateForm().
+Aggiungere un nuovo setting richiede di toccare tutti e tre (più la
+migrazione in readDb, vedi CLAUDE.md): rischio concreto di
+disallineamento (è già successo con activeDays, task #12).
+
+POSIZIONE:
+- server.js:43-57       (seed initDb)
+- server.js:1002-1013   (merge POST settings)
+- public/settings.js:334-350 (populateForm)
+
+SOLUZIONE PROPOSTA:
+Costante DEFAULT_SETTINGS unica lato server riusata da seed e merge;
+lato client eliminare i fallback (l'API fornisce sempre i valori) o
+esporre i default via /api/status.

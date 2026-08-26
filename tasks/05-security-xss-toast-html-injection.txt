@@ -1,0 +1,25 @@
+TASK #05 - Sicurezza: XSS via toast HTML e attributi non escapati
+=================================================================
+TIPO:     Vulnerabilità XSS (cross-site scripting)
+PRIORITÀ: Alta
+STATO:    Completato
+
+DESCRIZIONE:
+1) showToast() inserisce "message" come HTML GREZZO tramite innerHTML
+   ed è chiamata con input utente non sanitizzato:
+   showToast(`Parola chiave "${value}" aggiunta!`) — una keyword tipo
+   <img src=x onerror=...> viene salvata ed ESEGUITA al render del toast.
+2) item.codice e imageSrc (dati esterni) finiscono NON escapati negli
+   attributi href/src dei card, permettendo injection di attributi.
+
+POSIZIONE:
+- public/settings.js:482-484 (innerHTML del toast)
+- public/index.js:492-494    (stessa innerHTML)
+- public/settings.js:749     (chiamata con keyword raw)
+- public/index.js:349,371    (img src / href con codice non escapato)
+- public/all-daily.js:182,204
+
+SOLUZIONE PROPOSTA:
+Usare textContent invece di innerHTML per il messaggio del toast;
+escapare codice/virtualPath prima dell'interpolazione negli attributi
+(escapeHtml + verifica che non contengano virgolette).

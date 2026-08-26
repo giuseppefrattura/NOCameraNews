@@ -1,0 +1,21 @@
+TASK #13 - Bug: server "zombie" se initDb fallisce
+==================================================
+TIPO:     Bug di robustezza / ops
+PRIORITÀ: Media
+STATO:    Da fare
+
+DESCRIZIONE:
+Se initDb() fallisce dopo i 10 retry, l'IIFE di startup si limita a
+loggare l'errore: Express resta comunque in ascolto ma SENZA scheduler
+né polling Telegram. Il risultato è un server che risponde HTTP
+sembrando sano (healthcheck Docker OK perché /api/status non tocca il DB
+in scrittura) ma che non monitora più nulla.
+
+POSIZIONE:
+- server.js:842-850 (IIFE startup con try/catch che non termina)
+- server.js:1134    (app.listen registrato comunque)
+
+SOLUZIONE PROPOSTA:
+In caso di fallimento dell'init chiamare process.exit(1) così il
+restart policy di Docker riprova; oppure esporre lo stato degradato in
+/api/status (campo dbReady) e far fallire l'healthcheck.

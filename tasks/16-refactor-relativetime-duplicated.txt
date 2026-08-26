@@ -1,0 +1,17 @@
+TASK #16 - Refactor: getRelativeTime duplicato
+==============================================
+TIPO:     Code smell - duplicazione
+PRIORITÀ: Bassa
+STATO:    Da fare
+
+DESCRIZIONE:
+getRelativeTime() (conversione ISO → "Rilevato X min fa") è duplicata
+identica tra index.js e all-daily.js.
+
+POSIZIONE:
+- public/index.js:461-473
+- public/all-daily.js:237-249
+
+SOLUZIONE PROPOSTA:
+Spostare in public/shared.js insieme alle altre utility comuni
+(vedi task #14, #15, #17).

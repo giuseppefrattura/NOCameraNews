@@ -1,0 +1,22 @@
+TASK #10 - Bug: trigger-check restituisce successo anche se già in corso
+========================================================================
+TIPO:     Bug logico API
+PRIORITÀ: Media
+STATO:    Da fare
+
+DESCRIZIONE:
+checkNewProducts() esce subito (return silenzioso) se isCheckingNow è
+true. L'endpoint POST /api/trigger-check fa await di quella chiamata e
+risponde SEMPRE { success: true } anche quando NESSUNA scansione è
+stata eseguita: lastCheckedTime restituito può essere stantio e la UI
+mostra "Controllo completato!" ingannevole.
+
+POSIZIONE:
+- server.js:585-586 (early return con guardia)
+- server.js:1038-1042 (endpoint trigger-check)
+
+SOLUZIONE PROPOSTA:
+Far restituire a checkNewProducts un risultato booleano/enum
+(eseguita | già-in-corso) e far rispondere l'endpoint con uno stato
+dedicato (es. { success:false, reason:'already_running' }) gestito
+nella UI.

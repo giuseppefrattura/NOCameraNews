@@ -1,0 +1,23 @@
+TASK #26 - Cleanup: codice morto e commenti ingannevoli
+=======================================================
+TIPO:     Pulizia / manutenibilità
+PRIORITÀ: Bassa
+STATO:    Da fare
+
+DESCRIZIONE:
+Elementi superflui o fuorvianti da rimuovere/correggere:
+1) Clausola ON CONFLICT DO UPDATE nell'INSERT di writeAllDaily: è
+   preceduta da un DELETE totale della tabella → mai in conflitto.
+2) fs.existsSync/mkdirSync('public'): la cartella esiste già in repo e
+   viene copiata dal Dockerfile; il check non serve.
+3) Commento API_BASE errato in TUTTI E TRE i file JS frontend:
+   dice "fallback to localhost:3000" ma la costante è '' (same-origin).
+
+POSIZIONE:
+- server.js:476-480 (ON CONFLICT in writeAllDaily)
+- server.js:93-96   (mkdirSync public)
+- public/index.js:1-2, public/settings.js:1-2, public/all-daily.js:1-2
+
+SOLUZIONE PROPOSTA:
+Rimuovere la clausola ON CONFLICT, il blocco mkdirSync e correggere o
+eliminare il commento di API_BASE.

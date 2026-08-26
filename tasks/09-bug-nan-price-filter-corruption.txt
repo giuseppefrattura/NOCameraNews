@@ -1,0 +1,21 @@
+TASK #09 - Bug: corruzione silenziosa dei filtri prezzo (NaN)
+=============================================================
+TIPO:     Bug di validazione / UX
+PRIORITÀ: Media
+STATO:    Da fare
+
+DESCRIZIONE:
+handleFilterSubmit converte i prezzi con Number() senza alcuna
+validazione: inserendo "abc" si ottiene NaN → JSON.stringify lo
+trasforma in null → il filtro min/max diventa SILENTIAMENTE
+"nessun limite", senza nessun feedback per l'utente. Lo stesso vale
+lato server nel POST /api/keywords.
+
+POSIZIONE:
+- public/settings.js:632-651 (Number(minPrice)/Number(maxPrice))
+- server.js:915-924 (normalizzazione keywords senza controllo NaN)
+
+SOLUZIONE PROPOSTA:
+Validare i campi numerici (input type=number + Number.isFinite)
+sia lato client che lato server; mostrare un toast d'errore e non
+salvare in caso di valore non numerico.

@@ -1,0 +1,22 @@
+TASK #19 - Refactor: logica prezzo promo ripetuta 4 volte
+=========================================================
+TIPO:     Code smell - duplicazione
+PRIORITÀ: Bassa
+STATO:    Da fare
+
+DESCRIZIONE:
+L'espressione che determina il prezzo attivo/promo
+(prezzoPromozione > 0 && prezzoPromozione < prezzoVendita) è ripetuta
+quattro volte tra server e client. Un cambiamento di regola promo (es.
+sconti percentuali) andrebbe fatto in 4 punti.
+
+POSIZIONE:
+- server.js:705-707 (calcolo activePrice nei filtri keyword)
+- server.js:762-764 (formattazione messaggio notifica)
+- public/index.js:319     (isPromo card)
+- public/all-daily.js:152 (isPromo card)
+
+SOLUZIONE PROPOSTA:
+Server: helper getActivePrice(item) + isPromo(item) riusati ovunque;
+valutare di persistere il flag/valore calcolato allo scrape (come per
+il task #18). Client: stessi helper in shared.js.

@@ -1,0 +1,21 @@
+TASK #27 - Sicurezza: CORS completamente aperto
+================================================
+TIPO:     Indurimento sicurezza
+PRIORITÀ: Media
+STATO:    Da fare
+
+DESCRIZIONE:
+app.use(cors()) abilita QUALSIASI origine. Qualunque sito web può
+leggere gli endpoint pubblici (/api/history, /api/all-daily,
+/api/status) dal browser dell'utente e — quando ADMIN_PASSWORD NON è
+impostata — effettuare anche tutte le mutazioni (cancellazioni,
+modifiche impostazioni) tramite CSRF-style requests.
+
+POSIZIONE:
+- server.js:89 (app.use(cors()))
+
+SOLUZIONE PROPOSTA:
+Se l'app è servita same-origin dallo stesso Express, rimuovere cors()
+del tutto; altrimenti limitare con origin whitelist configurabile.
+Valutare inoltre di rendere obbligatorio ADMIN_PASSWORD in produzione
+(NODE_ENV=production senza password → warning/fail fast).

@@ -1,0 +1,18 @@
+TASK #22 - Refactor: calcolo "prossimo controllo" duplicato
+===========================================================
+TIPO:     Code smell - duplicazione
+PRIORITÀ: Bassa
+STATO:    Da fare
+
+DESCRIZIONE:
+Il calcolo dei secondi rimanenti al prossimo check (lastCheckedTime +
+intervalMs - now, clamp a 0) e la relativa formattazione mm:ss sono
+duplicati tra l'endpoint /api/status e il comando Telegram /status.
+
+POSIZIONE:
+- server.js:874-884 (GET /api/status)
+- server.js:316-329 (handleTelegramMessage, comando /status)
+
+SOLUZIONE PROPOSTA:
+Funzione getNextCheckInSeconds() (+ eventuale formatMmSs) unica
+richiamata da entrambi.

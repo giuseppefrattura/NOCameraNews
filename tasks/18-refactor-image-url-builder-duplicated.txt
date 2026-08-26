@@ -1,0 +1,21 @@
+TASK #18 - Refactor: builder URL immagini prodotto triplicato
+=============================================================
+TIPO:     Code smell - duplicazione client/server
+PRIORITÀ: Bassa
+STATO:    Da fare
+
+DESCRIZIONE:
+La logica che compone l'URL assoluto dell'immagine da item.virtualPath
+(startsWith http / / / altro) è scritta tre volte: una volta nel server
+(per Telegram) e due nel frontend.
+
+POSIZIONE:
+- server.js:777-787        (sendTelegramNotification)
+- public/index.js:334-346  (renderHistory)
+- public/all-daily.js:166-179 (renderProducts)
+
+SOLUZIONE PROPOSTA:
+Lato server: normalizzare virtualPath UNA SOLA VOLTA durante lo scrape
+(salvando productImageUrl nel JSONB) così server e client leggono solo
+il campo pronto. Lato client: helper condiviso in shared.js come
+fallback.

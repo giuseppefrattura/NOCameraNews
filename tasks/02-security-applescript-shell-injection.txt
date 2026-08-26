@@ -1,0 +1,23 @@
+TASK #02 - Sicurezza: injection shell/AppleScript nelle notifiche desktop
+==========================================================================
+TIPO:     Vulnerabilità di sicurezza (esecuzione comandi arbitrari)
+PRIORITÀ: Alta
+STATO:    Completato (opzione C: fallback AppleScript rimosso)
+
+DESCRIZIONE:
+sendAppleScriptNotification() interpola marca/modello del prodotto
+(dati ESTERNI e non fidati provenienti dall'API) direttamente in una
+stringa di shell passata a exec(`osascript -e '...'`). Viene escapato
+solo il doppio apice ("), NON il singolo apice (') né il backslash.
+Un prodotto il cui nome contiene un apostrofo rompe la stringa di
+shell consentendo l'esecuzione di comandi arbitrari sul Mac host.
+
+POSIZIONE:
+- server.js:526-544 (sendAppleScriptNotification)
+- server.js:536 (exec con interpolazione)
+
+SOLUZIONE PROPOSTA:
+Opzione A: passare lo script via stdin (exec con echo | osascript resta
+rischioso) → meglio execFile('osascript', ['-e', script]) evitando la
+shell. Opzione B: escapare correttamente ' e \ prima dell'interpolazione.
+Opzione C (consigliata): rimuovere del tutto il fallback AppleScript.

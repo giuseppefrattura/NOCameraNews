@@ -1,0 +1,22 @@
+TASK #12 - Bug: default activeDays incoerenti tra client e server
+=================================================================
+TIPO:     Bug di coerenza
+PRIORITÀ: Bassa
+STATO:    Da fare
+
+DESCRIZIONE:
+Il fallback per i giorni attivi diverge:
+- client populateForm(): [1,2,3,4,5]  (lunedì-venerdì)
+- server seed e merge:   [2,3,4,5,6]  (martedì-sabato, giorni del negozio)
+
+Un utente può vedere/dare per buoni giorni diversi da quelli realmente
+attivi a seconda del percorso di codice eseguito.
+
+POSIZIONE:
+- public/settings.js:350 (activeDays || [1,2,3,4,5])
+- server.js:50           (seed [2,3,4,5,6])
+- server.js:1006         (merge [2,3,4,5,6])
+
+SOLUZIONE PROPOSTA:
+Uniformare il default (mar-sab come da specifiche) in entrambi i punti;
+idealmente esporlo dall'API invece di duplicarlo nel client.

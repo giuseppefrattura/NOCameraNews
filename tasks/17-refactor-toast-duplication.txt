@@ -1,0 +1,20 @@
+TASK #17 - Refactor: showToast + createToastContainer duplicati (~90 righe)
+===========================================================================
+TIPO:     Code smell - duplicazione (incluso CSS inline)
+PRIORITÀ: Bassa
+STATO:    Da fare
+
+DESCRIZIONE:
+Il sistema di toast (showToast + createToastContainer con relativo CSS
+iniezione dinamica nello <head>) è duplicato quasi identico tra
+index.js e settings.js (~90 righe ciascuno). Il CSS dovrebbe stare in
+index.css; la logica in un modulo condiviso.
+
+POSIZIONE:
+- public/index.js:487-564
+- public/settings.js:477-548
+
+SOLUZIONE PROPOSTA:
+Estrarre showToast/createToastContainer in public/shared.js e spostare
+le regole .toast* nel foglio di stile comune index.css.
+NB: integrarsi col task XSS #05 (textContent).

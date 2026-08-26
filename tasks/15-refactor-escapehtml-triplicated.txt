@@ -1,0 +1,20 @@
+TASK #15 - Refactor: funzione escapeHtml triplicata
+===================================================
+TIPO:     Code smell - duplicazione
+PRIORITÀ: Bassa
+STATO:    Da fare
+
+DESCRIZIONE:
+La stessa funzione escapeHtml() è definita tre volte, copia identica,
+nei tre file frontend. Qualsiasi fix (es. per il task XSS #05) va
+applicato in tre posti: già ora le versioni divergono rischiando
+dimenticanze.
+
+POSIZIONE:
+- public/index.js:476-484
+- public/settings.js:809-817
+- public/all-daily.js:251-259
+
+SOLUZIONE PROPOSTA:
+Spostare escapeHtml in public/shared.js e importarla (script tag
+comune) nelle tre pagine; eliminare le copie locali.

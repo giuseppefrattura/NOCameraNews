@@ -1,0 +1,22 @@
+TASK #20 - Refactor: blocco POST /api/keywords ripetuto 3 volte in settings.js
+==============================================================================
+TIPO:     Code smell - duplicazione
+PRIORITÀ: Bassa
+STATO:    Da fare
+
+DESCRIZIONE:
+Tre flussi (salvataggio filtri, aggiunta keyword, rimozione keyword)
+ripetono lo stesso identico blocco: costruzione headers con
+x-admin-password condizionale, fetch POST /api/keywords, gestione ok /
+401 (reload) / errore (rollback state.keywords).
+
+POSIZIONE:
+- public/settings.js:672-706 (saveKeywordsToServer)
+- public/settings.js:708-767 (handleAddKeyword)
+- public/settings.js:769-807 (deleteKeyword)
+
+SOLUZIONE PROPOSTA:
+Un'unica funzione saveKeywords(keywords, { successMessage }) con
+rollback integrato; i tre chiamanti si limitano a modificare
+state.keywords e invocarla. Riutilizzabile anche per il pattern
+fetchWithAuth già esistente in index.js (task correlato #15/#17).
