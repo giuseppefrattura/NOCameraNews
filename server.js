@@ -4,7 +4,6 @@ const path = require('path');
 const fs = require('fs');
 const https = require('https');
 const notifier = require('node-notifier');
-const { exec } = require('child_process');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -101,9 +100,18 @@ let isCheckingNow = false;
 let checkTimeoutId = null;
 let lastCheckError = null;
 
+const PRODUCT_API_TIMEOUT_MS = 15000;
+
 // ==========================================
 // DATABASE HELPERS (Atomic Reads & Writes)
 // ==========================================
+let dbWriteChain = Promise.resolve();
+function withDbLock(task) {
+  const run = dbWriteChain.then(task, task);
+  dbWriteChain = run.then(() => undefined, () => undefined);
+  return run;
+}
+
 async function readDb() {
   try {
     const res = await pool.query("SELECT value FROM app_preferences WHERE key = 'db'");
@@ -351,24 +359,44 @@ async function handleTelegramMessage(message) {
   } else if (command === '/add') {
     if (!argument) {
       responseText = `⚠️ Specificare la parola chiave da aggiungere.\nEs: <code>/add LEICA</code>`;
-    } else if (db.keywords.includes(argument)) {
-      responseText = `ℹ️ La parola chiave <code>${argument}</code> è già tracciata.`;
     } else {
-      db.keywords.push(argument);
-      await writeDb(db);
-      responseText = `✅ Parola chiave <code>${argument}</code> aggiunta con successo!\nOra tracciamo ${db.keywords.length} termini.`;
-      console.log(`[Telegram Cmd] Added keyword: ${argument}`);
+      const result = await withDbLock(async () => {
+        const fresh = await readDb();
+        if (fresh.keywords.includes(argument)) {
+          return { duplicate: true, count: fresh.keywords.length };
+        }
+        fresh.keywords.push(argument);
+        await writeDb(fresh);
+        return { duplicate: false, count: fresh.keywords.length };
+      });
+
+      if (result.duplicate) {
+        responseText = `ℹ️ La parola chiave <code>${argument}</code> è già tracciata.`;
+      } else {
+        responseText = `✅ Parola chiave <code>${argument}</code> aggiunta con successo!\nOra tracciamo ${result.count} termini.`;
+        console.log(`[Telegram Cmd] Added keyword: ${argument}`);
+      }
     }
   } else if (command === '/remove' || command === '/delete') {
     if (!argument) {
       responseText = `⚠️ Specificare la parola chiave da rimuovere.\nEs: <code>/remove LEICA</code>`;
-    } else if (!db.keywords.includes(argument)) {
-      responseText = `ℹ️ La parola chiave <code>${argument}</code> non è presente nell'elenco.`;
     } else {
-      db.keywords = db.keywords.filter(kw => kw !== argument);
-      await writeDb(db);
-      responseText = `✅ Parola chiave <code>${argument}</code> rimossa con successo.\nOra tracciamo ${db.keywords.length} termini.`;
-      console.log(`[Telegram Cmd] Removed keyword: ${argument}`);
+      const result = await withDbLock(async () => {
+        const fresh = await readDb();
+        if (!fresh.keywords.includes(argument)) {
+          return { missing: true, count: fresh.keywords.length };
+        }
+        fresh.keywords = fresh.keywords.filter(kw => kw !== argument);
+        await writeDb(fresh);
+        return { missing: false, count: fresh.keywords.length };
+      });
+
+      if (result.missing) {
+        responseText = `ℹ️ La parola chiave <code>${argument}</code> non è presente nell'elenco.`;
+      } else {
+        responseText = `✅ Parola chiave <code>${argument}</code> rimossa con successo.\nOra tracciamo ${result.count} termini.`;
+        console.log(`[Telegram Cmd] Removed keyword: ${argument}`);
+      }
     }
   } else {
     responseText = `❓ Comando non riconosciuto.\nUsa /help per vedere l'elenco dei comandi disponibili.`;
@@ -503,44 +531,21 @@ function sendDesktopNotification(title, message, codice = null, soundEnabled = t
 
   console.log(`[Notification] Dispatching alert: "${title}" - "${message}"`);
 
-  // --- METHOD 1: Rich macOS Notification via node-notifier ---
   notifier.notify(
     {
       title: title,
       message: message,
-      sound: sound, // Plays macOS sound (e.g. Glass, Ping, Blow)
-      wait: true, // Wait for user interaction
+      sound: sound,
+      wait: true,
       timeout: 10,
-      open: productUrl // Opens the browser URL when clicked!
+      open: productUrl
     },
-    function (err, response, metadata) {
+    function (err) {
       if (err) {
-        console.warn('[Notification] node-notifier encountered an error, falling back to AppleScript...');
-        // --- METHOD 2: Fallback to Native AppleScript (osascript) ---
-        sendAppleScriptNotification(title, message, sound, productUrl);
+        console.error('[Notification] node-notifier failed:', err.message);
       }
     }
   );
-}
-
-function sendAppleScriptNotification(title, message, sound, productUrl) {
-  // Sanitize input strings for bash & AppleScript
-  const cleanTitle = title.replace(/"/g, '\\"');
-  const cleanMsg = message.replace(/"/g, '\\"');
-  
-  let script = `display notification "${cleanMsg}" with title "${cleanTitle}"`;
-  if (sound) {
-    script += ` sound name "${sound}"`;
-  }
-
-  exec(`osascript -e '${script}'`, (err) => {
-    if (err) {
-      console.error('[Notification] AppleScript notification failed:', err);
-    }
-  });
-
-  // If clicked, we can't easily capture click on osascript without complex listener,
-  // but if the URL is provided, we can log it. Node-notifier is the primary click handler.
 }
 
 // ==========================================
@@ -549,8 +554,8 @@ function sendAppleScriptNotification(title, message, sound, productUrl) {
 function fetchProductList() {
   return new Promise((resolve, reject) => {
     const url = 'https://noc-gateway-api.icyriver-4199ba13.northeurope.azurecontainerapps.io/api/v1/products/published/daily';
-    
-    https.get(url, {
+
+    const req = https.get(url, {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         'Accept': 'application/json'
@@ -575,10 +580,187 @@ function fetchProductList() {
           reject(new Error('Failed to parse API JSON response'));
         }
       });
-    }).on('error', (err) => {
+    });
+
+    req.setTimeout(PRODUCT_API_TIMEOUT_MS, () => {
+      req.destroy(new Error(`Request timed out after ${PRODUCT_API_TIMEOUT_MS}ms`));
+    });
+
+    req.on('error', (err) => {
       reject(err);
     });
   });
+}
+
+async function processProducts(products, settings) {
+  const db = await readDb();
+  const seenData = await readSeenIds();
+  const isFirstBoot = seenData.ids.length === 0;
+  let seenModified = false;
+  let dbModified = false;
+
+  const allDailyData = await readAllDaily();
+  let allDailyModified = false;
+
+  // Loop through retrieved items
+  for (const item of products) {
+    const itemId = item.id;
+
+    // Save all products to database if not already present
+    const existsInAllDaily = allDailyData.some(p => p.id === itemId);
+    if (!existsInAllDaily) {
+      allDailyData.unshift({
+        id: item.id,
+        codice: item.codice,
+        marca: item.marca,
+        modello: item.modello,
+        prezzoVendita: item.prezzoVendita,
+        prezzoPromozione: item.prezzoPromozione,
+        prenotato: item.prenotato,
+        stato: item.stato,
+        disponibile: item.disponibile,
+        virtualPath: item.virtualPath,
+        timestampScraped: new Date().toISOString()
+      });
+      allDailyModified = true;
+    }
+
+    const isNewItem = !seenData.ids.includes(itemId);
+
+    if (isNewItem) {
+      seenData.ids.push(itemId);
+      seenModified = true;
+    }
+
+    // Check if product is already in history to prevent duplicates
+    const existsInHistory = db.history.some(h => h.id === itemId);
+
+    if (!existsInHistory) {
+      // Check matching keywords
+      const brand = (item.marca || '').toUpperCase();
+      const model = (item.modello || '').toUpperCase();
+      const textToSearch = `${brand} ${model}`;
+
+      const matchedKeyword = db.keywords.find(kw => {
+        const kwText = typeof kw === 'object' && kw !== null ? kw.text : kw;
+        if (!kwText) return false;
+        return textToSearch.includes(kwText.toUpperCase().trim());
+      });
+
+      if (matchedKeyword) {
+        let isMatch = true;
+        let keywordText = matchedKeyword;
+
+        if (typeof matchedKeyword === 'object' && matchedKeyword !== null) {
+          keywordText = matchedKeyword.text;
+
+          // Calculate effective active price
+          const activePrice = item.prezzoPromozione > 0 && item.prezzoPromozione < item.prezzoVendita
+            ? item.prezzoPromozione
+            : item.prezzoVendita;
+
+          // Check min price limit
+          if (matchedKeyword.minPrice !== undefined && matchedKeyword.minPrice !== null && matchedKeyword.minPrice !== '') {
+            if (activePrice < Number(matchedKeyword.minPrice)) {
+              isMatch = false;
+              console.log(`[Scraper] Skip: Product "${brand} ${model}" price (€${activePrice}) is below min limit (€${matchedKeyword.minPrice}) for keyword "${keywordText}"`);
+            }
+          }
+          // Check max price limit
+          if (isMatch && matchedKeyword.maxPrice !== undefined && matchedKeyword.maxPrice !== null && matchedKeyword.maxPrice !== '') {
+            if (activePrice > Number(matchedKeyword.maxPrice)) {
+              isMatch = false;
+              console.log(`[Scraper] Skip: Product "${brand} ${model}" price (€${activePrice}) is above max limit (€${matchedKeyword.maxPrice}) for keyword "${keywordText}"`);
+            }
+          }
+          // Check exclusions
+          if (isMatch && Array.isArray(matchedKeyword.exclude) && matchedKeyword.exclude.length > 0) {
+            const hasExcludedWord = matchedKeyword.exclude.some(word => {
+              const cleanWord = word.trim().toUpperCase();
+              if (!cleanWord) return false;
+              return textToSearch.includes(cleanWord);
+            });
+            if (hasExcludedWord) {
+              isMatch = false;
+              console.log(`[Scraper] Skip: Product "${brand} ${model}" matches excluded terms [${matchedKeyword.exclude.join(', ')}] for keyword "${keywordText}"`);
+            }
+          }
+        }
+
+        if (isMatch) {
+          console.log(`[Scraper] Match found! "${brand} ${model}" matches keyword "${keywordText}"`);
+
+          // Build matched item history object
+          const historyItem = {
+            id: item.id,
+            codice: item.codice,
+            marca: item.marca,
+            modello: item.modello,
+            prezzoVendita: item.prezzoVendita,
+            prezzoPromozione: item.prezzoPromozione,
+            prenotato: item.prenotato,
+            stato: item.stato,
+            disponibile: item.disponibile,
+            virtualPath: item.virtualPath,
+            matchedKeyword: keywordText, // Store string to keep UI and history consistent
+            timestampScraped: new Date().toISOString(),
+            notified: !isFirstBoot && isNewItem
+          };
+
+          db.history.unshift(historyItem); // Insert at beginning of history array
+          dbModified = true;
+
+          // Trigger Notification ONLY for truly new items after first boot
+          if (!isFirstBoot && isNewItem) {
+            const priceStr = item.prezzoPromozione > 0 && item.prezzoPromozione < item.prezzoVendita
+              ? `€${item.prezzoPromozione} (PROMO! scontrato da €${item.prezzoVendita})`
+              : `€${item.prezzoVendita}`;
+
+            const title = `Nuovo Prodotto: ${item.marca}`;
+            const message = `${item.modello}\nPrezzo: ${priceStr} | Condizione: ${item.stato || 'N/D'}`;
+
+            // Trigger Desktop macOS notification if enabled
+            if (settings.desktopEnabled !== false) {
+              sendDesktopNotification(title, message, item.codice, settings.soundEnabled !== false);
+            }
+
+            // Trigger Telegram Bot notification if enabled
+            if (settings.telegramEnabled) {
+              // Build Image URL if available
+              let imageSrc = null;
+              if (item.virtualPath && item.virtualPath.trim() !== '') {
+                const path = item.virtualPath.trim();
+                if (path.startsWith('http')) {
+                  imageSrc = path;
+                } else if (path.startsWith('/')) {
+                  imageSrc = `https://www.newoldcamera.com${path}`;
+                } else {
+                  imageSrc = `https://www.newoldcamera.com/${path}`;
+                }
+              }
+              sendTelegramNotification(title, message, item.codice, imageSrc);
+            }
+          }
+        }
+      }
+    }
+  }
+
+  if (isFirstBoot) {
+    console.log(`[Scraper] Initial boot complete. Saved ${seenData.ids.length} existing items to skip alerts.`);
+  }
+
+  if (seenModified) {
+    await writeSeenIds(seenData);
+  }
+
+  if (dbModified) {
+    await writeDb(db);
+  }
+
+  if (allDailyModified) {
+    await writeAllDaily(allDailyData);
+  }
 }
 
 async function checkNewProducts() {
@@ -587,7 +769,9 @@ async function checkNewProducts() {
   const now = new Date();
   const currentHour = now.getHours();
   const todayDateString = now.toDateString();
-  const db = await readDb();
+  let db = await readDb();
+
+  let settings = db.settings;
 
   // Auto-clear logic after 20:00 or when a new day starts
   const isNewDay = db.lastDailyClearDate !== todayDateString;
@@ -595,22 +779,24 @@ async function checkNewProducts() {
   const alreadyClearedTodayAfterEight = db.lastDailyClearDate === todayDateString && db.lastDailyClearHour >= 20;
 
   if (isNewDay || (isAfterEightPM && !alreadyClearedTodayAfterEight)) {
-    console.log(`[Auto-Clear] Resetting daily databases (New Day: ${isNewDay}, After 20:00: ${isAfterEightPM})`);
-    
-    db.history = [];
-    db.lastDailyClearDate = todayDateString;
-    db.lastDailyClearHour = currentHour;
-    await writeDb(db);
+    await withDbLock(async () => {
+      db = await readDb();
+      console.log(`[Auto-Clear] Resetting daily databases (New Day: ${isNewDay}, After 20:00: ${isAfterEightPM})`);
 
-    await writeAllDaily([]);
+      db.history = [];
+      db.lastDailyClearDate = todayDateString;
+      db.lastDailyClearHour = currentHour;
+      await writeDb(db);
 
-    const seenData = await readSeenIds();
-    seenData.ids = [];
-    seenData.lastClearedDate = todayDateString;
-    await writeSeenIds(seenData);
+      await writeAllDaily([]);
+
+      const seenData = await readSeenIds();
+      seenData.ids = [];
+      seenData.lastClearedDate = todayDateString;
+      await writeSeenIds(seenData);
+    });
+    settings = db.settings;
   }
-
-  const settings = db.settings;
 
   // Verify Schedule and Activation settings
   if (!settings.enabled) {
@@ -641,173 +827,7 @@ async function checkNewProducts() {
 
     console.log(`[Scraper] Successfully loaded ${products.length} products from site.`);
 
-    const seenData = await readSeenIds();
-    const isFirstBoot = seenData.ids.length === 0;
-    let seenModified = false;
-    let dbModified = false;
-
-    const allDailyData = await readAllDaily();
-    let allDailyModified = false;
-
-    // Loop through retrieved items
-    for (const item of products) {
-      const itemId = item.id;
-
-      // Save all products to database if not already present
-      const existsInAllDaily = allDailyData.some(p => p.id === itemId);
-      if (!existsInAllDaily) {
-        allDailyData.unshift({
-          id: item.id,
-          codice: item.codice,
-          marca: item.marca,
-          modello: item.modello,
-          prezzoVendita: item.prezzoVendita,
-          prezzoPromozione: item.prezzoPromozione,
-          prenotato: item.prenotato,
-          stato: item.stato,
-          disponibile: item.disponibile,
-          virtualPath: item.virtualPath,
-          timestampScraped: new Date().toISOString()
-        });
-        allDailyModified = true;
-      }
-
-      const isNewItem = !seenData.ids.includes(itemId);
-      
-      if (isNewItem) {
-        seenData.ids.push(itemId);
-        seenModified = true;
-      }
-
-      // Check if product is already in history to prevent duplicates
-      const existsInHistory = db.history.some(h => h.id === itemId);
-
-      if (!existsInHistory) {
-        // Check matching keywords
-        const brand = (item.marca || '').toUpperCase();
-        const model = (item.modello || '').toUpperCase();
-        const textToSearch = `${brand} ${model}`;
-
-        const matchedKeyword = db.keywords.find(kw => {
-          const kwText = typeof kw === 'object' && kw !== null ? kw.text : kw;
-          if (!kwText) return false;
-          return textToSearch.includes(kwText.toUpperCase().trim());
-        });
-
-        if (matchedKeyword) {
-          let isMatch = true;
-          let keywordText = matchedKeyword;
-
-          if (typeof matchedKeyword === 'object' && matchedKeyword !== null) {
-            keywordText = matchedKeyword.text;
-            
-            // Calculate effective active price
-            const activePrice = item.prezzoPromozione > 0 && item.prezzoPromozione < item.prezzoVendita
-              ? item.prezzoPromozione
-              : item.prezzoVendita;
-
-            // Check min price limit
-            if (matchedKeyword.minPrice !== undefined && matchedKeyword.minPrice !== null && matchedKeyword.minPrice !== '') {
-              if (activePrice < Number(matchedKeyword.minPrice)) {
-                isMatch = false;
-                console.log(`[Scraper] Skip: Product "${brand} ${model}" price (€${activePrice}) is below min limit (€${matchedKeyword.minPrice}) for keyword "${keywordText}"`);
-              }
-            }
-            // Check max price limit
-            if (isMatch && matchedKeyword.maxPrice !== undefined && matchedKeyword.maxPrice !== null && matchedKeyword.maxPrice !== '') {
-              if (activePrice > Number(matchedKeyword.maxPrice)) {
-                isMatch = false;
-                console.log(`[Scraper] Skip: Product "${brand} ${model}" price (€${activePrice}) is above max limit (€${matchedKeyword.maxPrice}) for keyword "${keywordText}"`);
-              }
-            }
-            // Check exclusions
-            if (isMatch && Array.isArray(matchedKeyword.exclude) && matchedKeyword.exclude.length > 0) {
-              const hasExcludedWord = matchedKeyword.exclude.some(word => {
-                const cleanWord = word.trim().toUpperCase();
-                if (!cleanWord) return false;
-                return textToSearch.includes(cleanWord);
-              });
-              if (hasExcludedWord) {
-                isMatch = false;
-                console.log(`[Scraper] Skip: Product "${brand} ${model}" matches excluded terms [${matchedKeyword.exclude.join(', ')}] for keyword "${keywordText}"`);
-              }
-            }
-          }
-
-          if (isMatch) {
-            console.log(`[Scraper] Match found! "${brand} ${model}" matches keyword "${keywordText}"`);
-            
-            // Build matched item history object
-            const historyItem = {
-              id: item.id,
-              codice: item.codice,
-              marca: item.marca,
-              modello: item.modello,
-              prezzoVendita: item.prezzoVendita,
-              prezzoPromozione: item.prezzoPromozione,
-              prenotato: item.prenotato,
-              stato: item.stato,
-              disponibile: item.disponibile,
-              virtualPath: item.virtualPath,
-              matchedKeyword: keywordText, // Store string to keep UI and history consistent
-              timestampScraped: new Date().toISOString(),
-              notified: !isFirstBoot && isNewItem
-            };
-
-            db.history.unshift(historyItem); // Insert at beginning of history array
-            dbModified = true;
-
-            // Trigger Notification ONLY for truly new items after first boot
-            if (!isFirstBoot && isNewItem) {
-              const priceStr = item.prezzoPromozione > 0 && item.prezzoPromozione < item.prezzoVendita 
-                ? `€${item.prezzoPromozione} (PROMO! scontrato da €${item.prezzoVendita})`
-                : `€${item.prezzoVendita}`;
-              
-              const title = `Nuovo Prodotto: ${item.marca}`;
-              const message = `${item.modello}\nPrezzo: ${priceStr} | Condizione: ${item.stato || 'N/D'}`;
-
-              // Trigger Desktop macOS notification if enabled
-              if (settings.desktopEnabled !== false) {
-                sendDesktopNotification(title, message, item.codice, settings.soundEnabled !== false);
-              }
-
-              // Trigger Telegram Bot notification if enabled
-              if (settings.telegramEnabled) {
-                // Build Image URL if available
-                let imageSrc = null;
-                if (item.virtualPath && item.virtualPath.trim() !== '') {
-                  const path = item.virtualPath.trim();
-                  if (path.startsWith('http')) {
-                    imageSrc = path;
-                  } else if (path.startsWith('/')) {
-                    imageSrc = `https://www.newoldcamera.com${path}`;
-                  } else {
-                    imageSrc = `https://www.newoldcamera.com/${path}`;
-                  }
-                }
-                sendTelegramNotification(title, message, item.codice, imageSrc);
-              }
-            }
-          }
-        }
-      }
-    }
-
-    if (isFirstBoot) {
-      console.log(`[Scraper] Initial boot complete. Saved ${seenData.ids.length} existing items to skip alerts.`);
-    }
-
-    if (seenModified) {
-      await writeSeenIds(seenData);
-    }
-
-    if (dbModified) {
-      await writeDb(db);
-    }
-
-    if (allDailyModified) {
-      await writeAllDaily(allDailyData);
-    }
+    await withDbLock(() => processProducts(products, settings));
 
     lastCheckedTime = new Date().toISOString();
   } catch (err) {
@@ -911,8 +931,7 @@ app.post('/api/keywords', requireAdminPassword, async (req, res) => {
     return res.status(400).json({ error: 'Keywords must be an array.' });
   }
 
-  const db = await readDb();
-  db.keywords = keywords.map(kw => {
+  const normalizedKeywords = keywords.map(kw => {
     if (typeof kw === 'object' && kw !== null) {
       return {
         text: String(kw.text || '').trim().toUpperCase(),
@@ -929,9 +948,15 @@ app.post('/api/keywords', requireAdminPassword, async (req, res) => {
     return text && text.length > 0;
   });
 
-  await writeDb(db);
-  console.log('[API] Tracked keywords updated:', db.keywords);
-  res.json({ success: true, keywords: db.keywords });
+  const updatedKeywords = await withDbLock(async () => {
+    const db = await readDb();
+    db.keywords = normalizedKeywords;
+    await writeDb(db);
+    return db.keywords;
+  });
+
+  console.log('[API] Tracked keywords updated:', updatedKeywords);
+  res.json({ success: true, keywords: updatedKeywords });
 });
 
 // History CRUD
@@ -947,9 +972,11 @@ app.get('/api/all-daily', async (req, res) => {
 });
 
 app.delete('/api/history', requireAdminPassword, async (req, res) => {
-  const db = await readDb();
-  db.history = [];
-  await writeDb(db);
+  await withDbLock(async () => {
+    const db = await readDb();
+    db.history = [];
+    await writeDb(db);
+  });
   res.json({ success: true, message: 'Match history cleared.' });
 });
 
@@ -957,21 +984,23 @@ app.delete('/api/history', requireAdminPassword, async (req, res) => {
 app.post('/api/reset-all', requireAdminPassword, async (req, res) => {
   try {
     console.log('[API] Reset cache and history requested.');
-    
-    // Clear seen IDs
-    const seenData = {
-      lastClearedDate: new Date().toDateString(),
-      ids: []
-    };
-    await writeSeenIds(seenData);
 
-    // Clear history
-    const db = await readDb();
-    db.history = [];
-    await writeDb(db);
+    await withDbLock(async () => {
+      // Clear seen IDs
+      const seenData = {
+        lastClearedDate: new Date().toDateString(),
+        ids: []
+      };
+      await writeSeenIds(seenData);
 
-    // Clear all_daily database
-    await writeAllDaily([]);
+      // Clear history
+      const db = await readDb();
+      db.history = [];
+      await writeDb(db);
+
+      // Clear all_daily database
+      await writeAllDaily([]);
+    });
 
     res.json({ success: true, message: 'Cronologia, cache e database dei prodotti di tutti i giorni resettati con successo.' });
   } catch (err) {
@@ -992,46 +1021,69 @@ app.post('/api/settings', requireAdminPassword, async (req, res) => {
     return res.status(400).json({ error: 'Settings object is required.' });
   }
 
-  const db = await readDb();
-  const oldInterval = db.settings.intervalMinutes;
-  const oldTelegramEnabled = db.settings.telegramEnabled;
-  const oldTelegramToken = db.settings.telegramToken;
-  const oldTelegramChatId = db.settings.telegramChatId;
-  
-  // Merge settings carefully
-  db.settings = {
-    intervalMinutes: Number(settings.intervalMinutes) || 5,
-    activeHoursStart: Number(settings.activeHoursStart) >= 0 ? Number(settings.activeHoursStart) : 8,
-    activeHoursEnd: Number(settings.activeHoursEnd) >= 0 ? Number(settings.activeHoursEnd) : 20,
-    activeDays: Array.isArray(settings.activeDays) ? settings.activeDays.map(Number) : [2, 3, 4, 5, 6],
-    enabled: typeof settings.enabled === 'boolean' ? settings.enabled : true,
-    soundEnabled: typeof settings.soundEnabled === 'boolean' ? settings.soundEnabled : true,
-    desktopEnabled: typeof settings.desktopEnabled === 'boolean' ? settings.desktopEnabled : true,
-    telegramEnabled: typeof settings.telegramEnabled === 'boolean' ? settings.telegramEnabled : false,
-    telegramToken: typeof settings.telegramToken === 'string' ? settings.telegramToken.trim() : '',
-    telegramChatId: typeof settings.telegramChatId === 'string' ? settings.telegramChatId.trim() : ''
-  };
+  const intervalMinutes = Number(settings.intervalMinutes);
+  const activeHoursStart = Number(settings.activeHoursStart);
+  const activeHoursEnd = Number(settings.activeHoursEnd);
+  const activeDays = Array.isArray(settings.activeDays) ? settings.activeDays.map(Number) : [];
 
-  await writeDb(db);
-  console.log('[API] Settings updated successfully.');
-
-  // Restart scheduler if interval changed or enabled toggled
-  if (oldInterval !== db.settings.intervalMinutes || settings.enabled !== undefined) {
-    await startPolling();
+  const errors = [];
+  if (!Number.isInteger(intervalMinutes) || intervalMinutes < 1 || intervalMinutes > 1440) {
+    errors.push('"intervalMinutes" deve essere un intero tra 1 e 1440.');
+  }
+  if (!Number.isInteger(activeHoursStart) || activeHoursStart < 0 || activeHoursStart > 23 ||
+      !Number.isInteger(activeHoursEnd) || activeHoursEnd < 0 || activeHoursEnd > 23 ||
+      activeHoursStart >= activeHoursEnd) {
+    errors.push('"activeHoursStart" e "activeHoursEnd" devono essere interi tra 0 e 23 con inizio minore di fine.');
+  }
+  if (activeDays.length === 0 || !activeDays.every(d => Number.isInteger(d) && d >= 0 && d <= 6)) {
+    errors.push('"activeDays" deve essere un array non vuoto di interi tra 0 e 6 (0 = domenica).');
+  }
+  if (errors.length > 0) {
+    return res.status(400).json({ error: errors.join(' ') });
   }
 
-  // Restart Telegram Polling if Telegram settings changed
-  if (oldTelegramEnabled !== db.settings.telegramEnabled || 
-      oldTelegramToken !== db.settings.telegramToken || 
-      oldTelegramChatId !== db.settings.telegramChatId) {
-    if (db.settings.telegramEnabled) {
-      await startTelegramPolling();
-    } else {
-      stopTelegramPolling();
+  let savedSettings = null;
+  await withDbLock(async () => {
+    const db = await readDb();
+    const oldInterval = db.settings.intervalMinutes;
+    const oldTelegramEnabled = db.settings.telegramEnabled;
+    const oldTelegramToken = db.settings.telegramToken;
+    const oldTelegramChatId = db.settings.telegramChatId;
+
+    db.settings = {
+      intervalMinutes,
+      activeHoursStart,
+      activeHoursEnd,
+      activeDays,
+      enabled: typeof settings.enabled === 'boolean' ? settings.enabled : true,
+      soundEnabled: typeof settings.soundEnabled === 'boolean' ? settings.soundEnabled : true,
+      desktopEnabled: typeof settings.desktopEnabled === 'boolean' ? settings.desktopEnabled : true,
+      telegramEnabled: typeof settings.telegramEnabled === 'boolean' ? settings.telegramEnabled : false,
+      telegramToken: typeof settings.telegramToken === 'string' ? settings.telegramToken.trim() : '',
+      telegramChatId: typeof settings.telegramChatId === 'string' ? settings.telegramChatId.trim() : ''
+    };
+
+    await writeDb(db);
+    savedSettings = db.settings;
+
+    // Restart scheduler if interval changed or enabled toggled
+    if (oldInterval !== db.settings.intervalMinutes || settings.enabled !== undefined) {
+      await startPolling();
     }
-  }
 
-  res.json({ success: true, settings: db.settings });
+    // Restart Telegram Polling if Telegram settings changed
+    if (oldTelegramEnabled !== db.settings.telegramEnabled ||
+        oldTelegramToken !== db.settings.telegramToken ||
+        oldTelegramChatId !== db.settings.telegramChatId) {
+      if (db.settings.telegramEnabled) {
+        await startTelegramPolling();
+      } else {
+        stopTelegramPolling();
+      }
+    }
+  });
+
+  res.json({ success: true, settings: savedSettings });
 });
 
 // Trigger a direct scraper execution manually

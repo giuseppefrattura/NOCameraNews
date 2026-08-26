@@ -179,7 +179,7 @@ function renderProducts() {
     }
 
     const imageHtml = hasImage 
-      ? `<img src="${imageSrc}" alt="${escapeHtml(item.marca)} ${escapeHtml(item.modello)}" loading="lazy">`
+      ? `<img src="${escapeHtml(imageSrc)}" alt="${escapeHtml(item.marca)} ${escapeHtml(item.modello)}" loading="lazy">`
       : `
         <div class="product-image-placeholder">
           <svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
@@ -201,7 +201,7 @@ function renderProducts() {
     const relativeTime = getRelativeTime(item.timestampScraped);
 
     // Direct Product Link URL
-    const productUrl = `https://www.newoldcamera.com/Scheda.aspx?Codice=${item.codice}`;
+    const productUrl = `https://www.newoldcamera.com/Scheda.aspx?Codice=${encodeURIComponent(item.codice)}`;
 
     card.innerHTML = `
       <div class="product-image-container">
@@ -217,7 +217,7 @@ function renderProducts() {
         <div class="prod-footer">
           ${priceHtml}
           <div class="card-actions">
-            <a href="${productUrl}" target="_blank" class="btn-card-link" title="Vedi scheda prodotto sul sito">
+            <a href="${escapeHtml(productUrl)}" target="_blank" class="btn-card-link" title="Vedi scheda prodotto sul sito">
               <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
             </a>
           </div>

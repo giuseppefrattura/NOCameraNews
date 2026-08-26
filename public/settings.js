@@ -479,10 +479,11 @@ function showToast(message, type = 'info') {
   
   const toast = document.createElement('div');
   toast.className = `toast toast-${type}`;
-  toast.innerHTML = `
-    <span class="toast-message">${message}</span>
-  `;
-  
+  const toastMessage = document.createElement('span');
+  toastMessage.className = 'toast-message';
+  toastMessage.textContent = message;
+  toast.appendChild(toastMessage);
+
   container.appendChild(toast);
   
   // Transition in
